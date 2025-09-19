@@ -1,0 +1,31 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage{graphicx}
+\usepackage{amsmath,amssymb}
+\usepackage[pagebackref,breaklinks,colorlinks]{hyperref}
+
+\title{Diffusion-Enhanced Inputs for Robust 3D Gaussian Splatting}
+\author{Your Name \\ Texas A\&M University}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We study whether diffusion-based restoration of low-quality views improves 3D Gaussian Splatting reconstructions on small scenes.
+\end{abstract}
+
+\input{sections/intro}
+\input{sections/related}
+\input{sections/method}
+\input{sections/experiments}
+\input{sections/results}
+\input{sections/conclusion}
+
+\bibliographystyle{ieee_fullname} % keep this; we'll switch to CVPR style later
+\bibliography{refs}
+
+% Explicit BibTeX commands to avoid errors
+\citation{Kerbl2023}
+\bibdata{refs}
+\bibstyle{ieee_fullname}
+
+\end{document}

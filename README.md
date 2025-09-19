@@ -1,1 +1,1 @@
-# diffusion-3dgs-project
+# Diffusion-Enchanced 3D Guassian Splatting
