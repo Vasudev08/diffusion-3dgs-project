@@ -1,0 +1,6 @@
+[submodule "gsplat"]
+	path = gsplat
+	url = https://github.com/nerfstudio-project/gsplat.git
+[submodule "stable-virtual-camera"]
+	path = stable-virtual-camera
+	url = https://github.com/Stability-AI/stable-virtual-camera
