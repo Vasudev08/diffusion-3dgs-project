@@ -1,7 +1,43 @@
 [project]
 name = "diffusion-3dgs-project"
 version = "0.1.0"
-description = "Add your description here"
+description = "Diffusion-Enhanced 3D Gaussian Splatting with Agentic Image Processing Pipeline"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "langchain>=0.1.0",
+    "langchain-openai>=0.0.5",
+    "langchain-anthropic>=0.0.1",
+    "opencv-python",
+    "pillow",
+    "numpy",
+    "torch>=2.0.0",
+    "pycolmap",
+    "tqdm",
+    "fire",
+    "safetensors",
+    "huggingface-hub",
+    "imageio",
+    "scipy",
+    "matplotlib",
+    "scikit-image",
+    # DiffBIR dependencies
+    "omegaconf>=2.3.0",
+    "accelerate>=0.28.0",
+    "einops>=0.7.0",
+    "xformers>=0.0.25",
+    "timm>=0.9.16",
+    "pytorch-lightning>=2.2.1",
+    "tensorboard>=2.16.2",
+    "protobuf>=4.25.3",
+    "lpips>=0.1.4",
+    "facexlib>=0.3.0",
+    "gradio>=4.43.0",
+    "polars>=1.12.0",
+    "torchsde>=0.2.6",
+    "bitsandbytes>=0.44.1",
+    "transformers>=4.37.2",
+    "tokenizers>=0.15.1",
+    "sentencepiece>=0.1.99",
+    "fairscale>=0.4.4",
+]

@@ -4,3 +4,6 @@
 [submodule "stable-virtual-camera"]
 	path = stable-virtual-camera
 	url = https://github.com/Stability-AI/stable-virtual-camera
+[submodule "DiffBIR"]
+	path = DiffBIR
+	url = https://github.com/XPixelGroup/DiffBIR.git
