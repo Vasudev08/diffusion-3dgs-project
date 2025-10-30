@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 
 # Set up API key (replace with your actual key)
-os.environ["OPENAI_API_KEY"] = "your-openai-api-key-here"
+os.environ["GOOGLE_API_KEY"] = "your-api-key"
 
 from pydantic import SecretStr
 
@@ -22,12 +22,12 @@ from agentic_image2dataset import (
 def main():
     """Example usage of the agentic pipeline."""
 
-    api_key = os.getenv("OPENAI_API_KEY")
+    api_key = os.getenv("GOOGLE_API_KEY")
     api_key = SecretStr(api_key) if api_key else None
 
     # Create configuration
     config = PipelineConfig(
-        llm=LLMConfig(model_name="gpt-4", api_key=api_key, temperature=0.1),
+        llm=LLMConfig(model_name="gemini-2.0-flash", api_key=api_key, temperature=0.1),
         model=ModelConfig(
             device="cuda",
             num_views=24,

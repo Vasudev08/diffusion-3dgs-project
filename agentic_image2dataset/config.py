@@ -2,18 +2,23 @@
 Configuration classes for the agentic pipeline.
 """
 
+import getpass
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
 from pydantic import SecretStr
+
+if "GOOGLE_API_KEY" not in os.environ:
+    os.environ["GOOGLE_API_KEY"] = getpass.getpass("Enter your Google AI API key: ")
 
 
 @dataclass
 class LLMConfig:
     """Configuration for LLM agent."""
 
-    model_name: str = "gpt-4"
-    api_key: SecretStr | None = None
+    model_name: str = "gemini-2.5-flash"
+    api_key: SecretStr = SecretStr(os.environ["GOOGLE_API_KEY"])
     temperature: float = 0.1
     max_tokens: int = 2000
 

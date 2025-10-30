@@ -52,27 +52,6 @@ class BaseProcessingModel(ABC):
         """Get a description of what this model does."""
         pass
 
-    @abstractmethod
-    def get_requirements(self) -> Dict[str, Any]:
-        """Get requirements for this model to run."""
-        pass
-
-    def is_available(self) -> bool:
-        """Check if this model is available (dependencies installed, etc.)."""
-        try:
-            requirements = self.get_requirements()
-            return all(self._check_requirement(req) for req in requirements)
-        except Exception:
-            return False
-
-    def _check_requirement(self, requirement: str) -> bool:
-        """Check if a specific requirement is met."""
-        try:
-            __import__(requirement)
-            return True
-        except ImportError:
-            return False
-
 
 class ModelRegistry:
     """Registry for managing available processing models."""
@@ -90,7 +69,7 @@ class ModelRegistry:
 
     def list_available(self) -> List[str]:
         """List names of available models."""
-        return [name for name, model in self._models.items() if model.is_available()]
+        return [name for name, model in self._models.items()]
 
     def get_all(self) -> Dict[str, BaseProcessingModel]:
         """Get all registered models."""

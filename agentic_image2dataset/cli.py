@@ -199,59 +199,49 @@ def _get_api_key_from_env(model_name: str) -> str:
 
 def _list_models():
     """List available models."""
-    try:
-        # Create a minimal config for model initialization
-        config = PipelineConfig(
-            llm=LLMConfig(),
-            model=ModelConfig(),
-            output_dir=Path("."),
-            input_image=Path("."),
-            skip_colmap=True,
-            verbose=False,
-        )
+    # Create a minimal config for model initialization
+    config = PipelineConfig(
+        llm=LLMConfig(),
+        model=ModelConfig(),
+        output_dir=Path("."),
+        input_image=Path("."),
+        skip_colmap=True,
+        verbose=False,
+    )
 
-        pipeline = AgenticPipeline(config)
-        available_models = pipeline.get_available_models()
+    pipeline = AgenticPipeline(config)
+    available_models = pipeline.get_available_models()
 
-        print("Available models:")
-        for model_name in available_models:
-            model_info = pipeline.get_model_info(model_name)
-            if model_info:
-                status = (
-                    "✅ Available" if model_info["available"] else "❌ Not available"
-                )
-                print(f"  {model_name}: {status}")
-                print(f"    Description: {model_info['description']}")
-
-    except Exception as e:
-        print(f"Error listing models: {e}")
+    print("Available models:")
+    for model_name in available_models:
+        model_info = pipeline.get_model_info(model_name)
+        if model_info:
+            status = "✅ Available" if model_info["available"] else "❌ Not available"
+            print(f"  {model_name}: {status}")
+            print(f"    Description: {model_info['description']}")
 
 
 def _show_model_info(model_name: str):
     """Show detailed information about a model."""
-    try:
-        config = PipelineConfig(
-            llm=LLMConfig(),
-            model=ModelConfig(),
-            output_dir=Path("."),
-            input_image=Path("."),
-            skip_colmap=True,
-            verbose=False,
-        )
+    config = PipelineConfig(
+        llm=LLMConfig(),
+        model=ModelConfig(),
+        output_dir=Path("."),
+        input_image=Path("."),
+        skip_colmap=True,
+        verbose=False,
+    )
 
-        pipeline = AgenticPipeline(config)
-        model_info = pipeline.get_model_info(model_name)
+    pipeline = AgenticPipeline(config)
+    model_info = pipeline.get_model_info(model_name)
 
-        if model_info:
-            print(f"Model: {model_name}")
-            print(f"Description: {model_info['description']}")
-            print(f"Available: {'Yes' if model_info['available'] else 'No'}")
-            print(f"Requirements: {json.dumps(model_info['requirements'], indent=2)}")
-        else:
-            print(f"Model '{model_name}' not found")
-
-    except Exception as e:
-        print(f"Error getting model info: {e}")
+    if model_info:
+        print(f"Model: {model_name}")
+        print(f"Description: {model_info['description']}")
+        print(f"Available: {'Yes' if model_info['available'] else 'No'}")
+        print(f"Requirements: {json.dumps(model_info['requirements'], indent=2)}")
+    else:
+        print(f"Model '{model_name}' not found")
 
 
 if __name__ == "__main__":

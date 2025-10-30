@@ -121,84 +121,78 @@ class COLMAPProcessor:
         for dir_path in [database_dir, features_dir, matches_dir, sparse_dir]:
             dir_path.mkdir(exist_ok=True)
 
-        try:
-            # Step 1: Feature extraction
-            print("Extracting features...")
-            import pycolmap
+        # Step 1: Feature extraction
+        print("Extracting features...")
+        import pycolmap
 
-            sift_options = SiftExtractionOptions()
-            # Apply quality settings to sift options
-            for key, value in self.quality_settings["feature_extraction"].items():
-                if hasattr(sift_options, key):
-                    setattr(sift_options, key, value)
+        sift_options = SiftExtractionOptions()
+        # Apply quality settings to sift options
+        for key, value in self.quality_settings["feature_extraction"].items():
+            if hasattr(sift_options, key):
+                setattr(sift_options, key, value)
 
-            pycolmap.extract_features(
-                database_path=str(database_dir / "database.db"),
-                image_path=str(image_dir),
-                sift_options=sift_options,
-                device=Device.cuda if self.device == "cuda" else Device.cpu,
-            )
+        pycolmap.extract_features(
+            database_path=str(database_dir / "database.db"),
+            image_path=str(image_dir),
+            sift_options=sift_options,
+            device=Device.cuda if self.device == "cuda" else Device.cpu,
+        )
 
-            # Step 2: Feature matching
-            print("Matching features...")
-            sift_matching_options = SiftMatchingOptions()
-            exhaustive_matching_options = ExhaustiveMatchingOptions()
+        # Step 2: Feature matching
+        print("Matching features...")
+        sift_matching_options = SiftMatchingOptions()
+        exhaustive_matching_options = ExhaustiveMatchingOptions()
 
-            # Apply quality settings to matching options
-            for key, value in self.quality_settings["feature_matching"].items():
-                if hasattr(sift_matching_options, key):
-                    setattr(sift_matching_options, key, value)
-                elif hasattr(exhaustive_matching_options, key):
-                    setattr(exhaustive_matching_options, key, value)
+        # Apply quality settings to matching options
+        for key, value in self.quality_settings["feature_matching"].items():
+            if hasattr(sift_matching_options, key):
+                setattr(sift_matching_options, key, value)
+            elif hasattr(exhaustive_matching_options, key):
+                setattr(exhaustive_matching_options, key, value)
 
-            pycolmap.match_exhaustive(
-                database_path=str(database_dir / "database.db"),
-                sift_options=sift_matching_options,
-                matching_options=exhaustive_matching_options,
-                device=Device.cuda if self.device == "cuda" else Device.cpu,
-            )
+        pycolmap.match_exhaustive(
+            database_path=str(database_dir / "database.db"),
+            sift_options=sift_matching_options,
+            matching_options=exhaustive_matching_options,
+            device=Device.cuda if self.device == "cuda" else Device.cpu,
+        )
 
-            # Step 3: Reconstruction
-            print("Running reconstruction...")
-            pipeline_options = IncrementalPipelineOptions()
+        # Step 3: Reconstruction
+        print("Running reconstruction...")
+        pipeline_options = IncrementalPipelineOptions()
 
-            # Apply quality settings to pipeline options
-            for key, value in self.quality_settings["mapper"].items():
-                if hasattr(pipeline_options, key):
-                    setattr(pipeline_options, key, value)
+        # Apply quality settings to pipeline options
+        for key, value in self.quality_settings["mapper"].items():
+            if hasattr(pipeline_options, key):
+                setattr(pipeline_options, key, value)
 
-            reconstructions = pycolmap.incremental_mapping(
-                database_path=str(database_dir / "database.db"),
-                image_path=str(image_dir),
-                output_path=str(sparse_dir),
-                options=pipeline_options,
-            )
+        reconstructions = pycolmap.incremental_mapping(
+            database_path=str(database_dir / "database.db"),
+            image_path=str(image_dir),
+            output_path=str(sparse_dir),
+            options=pipeline_options,
+        )
 
-            # Get the first (and typically only) reconstruction
-            reconstruction = (
-                list(reconstructions.values())[0] if reconstructions else None
-            )
+        # Get the first (and typically only) reconstruction
+        reconstruction = list(reconstructions.values())[0] if reconstructions else None
 
-            if reconstruction is None:
-                return {
-                    "success": False,
-                    "error": "Reconstruction failed - no valid reconstruction found",
-                    "output_dir": output_dir,
-                }
-
-            # Export to standard COLMAP format
-            self._export_colmap_format(reconstruction, sparse_dir)
-
+        if reconstruction is None:
             return {
-                "success": True,
-                "reconstruction": reconstruction,
+                "success": False,
+                "error": "Reconstruction failed - no valid reconstruction found",
                 "output_dir": output_dir,
-                "sparse_dir": sparse_dir,
-                "database_path": database_dir / "database.db",
             }
 
-        except Exception as e:
-            return {"success": False, "error": str(e), "output_dir": output_dir}
+        # Export to standard COLMAP format
+        self._export_colmap_format(reconstruction, sparse_dir)
+
+        return {
+            "success": True,
+            "reconstruction": reconstruction,
+            "output_dir": output_dir,
+            "sparse_dir": sparse_dir,
+            "database_path": database_dir / "database.db",
+        }
 
     def _export_colmap_format(self, reconstruction: Reconstruction, output_dir: Path):
         """Export reconstruction to standard COLMAP format."""
@@ -207,64 +201,56 @@ class COLMAPProcessor:
 
     def validate_reconstruction(self, sparse_dir: Path) -> dict[str, Any]:
         """Validate the COLMAP reconstruction."""
-        try:
-            # Load the reconstruction
-            import pycolmap
+        # Load the reconstruction
+        import pycolmap
 
-            reconstruction = pycolmap.Reconstruction()
-            reconstruction.read_binary(str(sparse_dir))
+        reconstruction = pycolmap.Reconstruction()
+        reconstruction.read_binary(str(sparse_dir))
 
-            num_cameras = len(reconstruction.cameras)
-            num_images = len(reconstruction.images)
-            num_points = len(reconstruction.points3D)
+        num_cameras = len(reconstruction.cameras)
+        num_images = len(reconstruction.images)
+        num_points = len(reconstruction.points3D)
 
-            # Check reconstruction quality
-            if num_images < 3:
-                quality = "poor"
-            elif num_images < 10:
-                quality = "fair"
-            elif num_images < 20:
-                quality = "good"
-            else:
-                quality = "excellent"
+        # Check reconstruction quality
+        if num_images < 3:
+            quality = "poor"
+        elif num_images < 10:
+            quality = "fair"
+        elif num_images < 20:
+            quality = "good"
+        else:
+            quality = "excellent"
 
-            return {
-                "valid": True,
-                "num_cameras": num_cameras,
-                "num_images": num_images,
-                "num_points": num_points,
-                "quality": quality,
-            }
-
-        except Exception as e:
-            return {"valid": False, "error": str(e)}
+        return {
+            "valid": True,
+            "num_cameras": num_cameras,
+            "num_images": num_images,
+            "num_points": num_points,
+            "quality": quality,
+        }
 
     def create_gsplat_dataset(
         self, sparse_dir: Path, images_dir: Path, output_dir: Path
     ) -> dict[str, Any]:
         """Create a dataset compatible with gsplat training."""
-        try:
-            # Copy images to output directory
-            output_images_dir = output_dir / "images"
-            output_images_dir.mkdir(parents=True, exist_ok=True)
+        # Copy images to output directory
+        output_images_dir = output_dir / "images"
+        output_images_dir.mkdir(parents=True, exist_ok=True)
 
-            for img_file in images_dir.glob("*"):
-                if img_file.suffix.lower() in [".jpg", ".jpeg", ".png"]:
-                    _ = shutil.copy2(img_file, output_images_dir / img_file.name)
+        for img_file in images_dir.glob("*"):
+            if img_file.suffix.lower() in [".jpg", ".jpeg", ".png"]:
+                _ = shutil.copy2(img_file, output_images_dir / img_file.name)
 
-            # Copy sparse reconstruction
-            output_sparse_dir = output_dir / "sparse" / "0"
-            output_sparse_dir.mkdir(parents=True, exist_ok=True)
+        # Copy sparse reconstruction
+        output_sparse_dir = output_dir / "sparse" / "0"
+        output_sparse_dir.mkdir(parents=True, exist_ok=True)
 
-            for file in sparse_dir.glob("*.bin"):
-                _ = shutil.copy2(file, output_sparse_dir / file.name)
+        for file in sparse_dir.glob("*.bin"):
+            _ = shutil.copy2(file, output_sparse_dir / file.name)
 
-            return {
-                "success": True,
-                "output_dir": output_dir,
-                "images_dir": output_images_dir,
-                "sparse_dir": output_sparse_dir,
-            }
-
-        except Exception as e:
-            return {"success": False, "error": str(e)}
+        return {
+            "success": True,
+            "output_dir": output_dir,
+            "images_dir": output_images_dir,
+            "sparse_dir": output_sparse_dir,
+        }

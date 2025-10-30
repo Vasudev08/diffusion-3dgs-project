@@ -39,18 +39,18 @@ def analyze_image_quality(image_path: Path) -> Dict[str, Any]:
     # Blur detection using Laplacian variance
     laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
     analysis["blur_score"] = float(laplacian_var)
-    analysis["is_blurry"] = laplacian_var < 100  # Threshold for blur detection
+    analysis["is_blurry"] = bool(laplacian_var < 100)  # Threshold for blur detection
 
     # Brightness analysis
     mean_brightness = np.mean(gray)
     analysis["brightness"] = float(mean_brightness)
-    analysis["is_dark"] = mean_brightness < 50
-    analysis["is_bright"] = mean_brightness > 200
+    analysis["is_dark"] = bool(mean_brightness < 50)
+    analysis["is_bright"] = bool(mean_brightness > 200)
 
     # Contrast analysis
     contrast = np.std(gray)
     analysis["contrast"] = float(contrast)
-    analysis["low_contrast"] = contrast < 30
+    analysis["low_contrast"] = bool(contrast < 30)
 
     # Edge density (scene complexity)
     edges = cv2.Canny(gray, 50, 150)
@@ -68,7 +68,7 @@ def analyze_image_quality(image_path: Path) -> Dict[str, Any]:
         # Saturation analysis
         mean_saturation = np.mean(s)
         analysis["saturation"] = float(mean_saturation)
-        analysis["is_desaturated"] = mean_saturation < 30
+        analysis["is_desaturated"] = bool(mean_saturation < 30)
 
         # Color diversity
         unique_colors = len(np.unique(h.reshape(-1)))

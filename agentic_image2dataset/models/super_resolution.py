@@ -16,12 +16,7 @@ DIFFBIR_PATH = Path(__file__).parent.parent.parent / "DiffBIR"
 if str(DIFFBIR_PATH) not in sys.path:
     sys.path.insert(0, str(DIFFBIR_PATH))
 
-try:
-    from diffbir.inference import BSRInferenceLoop
-
-    DIFFBIR_AVAILABLE = True
-except ImportError:
-    DIFFBIR_AVAILABLE = False
+from diffbir.inference import BSRInferenceLoop
 
 
 class DiffBIRModel(BaseProcessingModel):
@@ -35,11 +30,6 @@ class DiffBIRModel(BaseProcessingModel):
         self.device: str = device
         self.version: str = version
         self.inference_loop: Optional[BSRInferenceLoop] = None
-
-        if not DIFFBIR_AVAILABLE:
-            raise ImportError(
-                "DiffBIR dependencies not available. Please install DiffBIR requirements."
-            )
 
         # Initialize DiffBIR inference loop
         self._setup_diffbir()
@@ -90,12 +80,9 @@ class DiffBIRModel(BaseProcessingModel):
                 self.strength: float = 1
 
         args = MockArgs(self.device, self.scale, self.version)
-        if DIFFBIR_AVAILABLE:
-            self.inference_loop = BSRInferenceLoop(args)
-            self.inference_loop.load_cleaner()
-            self.inference_loop.load_pipeline()
-        else:
-            self.inference_loop = None
+        self.inference_loop = BSRInferenceLoop(args)
+        self.inference_loop.load_cleaner()
+        self.inference_loop.load_pipeline()
 
     def analyze(self, image_path: Union[str, Path]) -> Dict[str, Any]:
         """Analyze image for super-resolution suitability."""
@@ -144,65 +131,55 @@ class DiffBIRModel(BaseProcessingModel):
 
         scale = scale or self.scale
 
-        try:
-            # Load the image
-            image = load_image(image_path)
+        # Load the image
+        image = load_image(image_path)
 
-            # Convert numpy array to PIL Image
-            if image.dtype != np.uint8:
-                image = (image * 255).astype(np.uint8)
-            pil_image = Image.fromarray(image)
+        # Convert numpy array to PIL Image
+        if image.dtype != np.uint8:
+            image = (image * 255).astype(np.uint8)
+        pil_image = Image.fromarray(image)
 
-            # Use DiffBIR for super-resolution
-            # Create temporary input and output directories for DiffBIR
-            temp_input_dir = output_dir / "temp_input"
-            temp_output_dir = output_dir / "temp_output"
-            temp_input_dir.mkdir(exist_ok=True)
-            temp_output_dir.mkdir(exist_ok=True)
+        # Use DiffBIR for super-resolution
+        # Create temporary input and output directories for DiffBIR
+        temp_input_dir = output_dir / "temp_input"
+        temp_output_dir = output_dir / "temp_output"
+        temp_input_dir.mkdir(exist_ok=True)
+        temp_output_dir.mkdir(exist_ok=True)
 
-            # Save input image
-            temp_input_path = temp_input_dir / image_path.name
-            pil_image.save(temp_input_path)
+        # Save input image
+        temp_input_path = temp_input_dir / image_path.name
+        pil_image.save(temp_input_path)
 
-            # Check if DiffBIR is available
-            if self.inference_loop is None:
-                raise RuntimeError("DiffBIR inference loop not initialized")
+        # Check if DiffBIR is available
+        if self.inference_loop is None:
+            raise RuntimeError("DiffBIR inference loop not initialized")
 
-            # Update inference loop args for this specific scale
-            self.inference_loop.args.upscale = scale
+        # Update inference loop args for this specific scale
+        self.inference_loop.args.upscale = scale
 
-            # Run DiffBIR inference
-            self.inference_loop.args.input = str(temp_input_dir)
-            self.inference_loop.args.output = str(temp_output_dir)
+        # Run DiffBIR inference
+        self.inference_loop.args.input = str(temp_input_dir)
+        self.inference_loop.args.output = str(temp_output_dir)
 
-            # Process the image
-            self.inference_loop.run()
+        # Process the image
+        self.inference_loop.run()
 
-            # Find the output file
-            output_files = list(temp_output_dir.glob("*"))
-            if not output_files:
-                raise RuntimeError("DiffBIR did not produce any output files")
+        # Find the output file
+        output_files = list(temp_output_dir.glob("*"))
+        if not output_files:
+            raise RuntimeError("DiffBIR did not produce any output files")
 
-            # Move the result to the final location
-            final_output_path = output_dir / f"sr_{image_path.stem}.png"
-            _ = output_files[0].rename(final_output_path)
+        # Move the result to the final location
+        final_output_path = output_dir / f"sr_{image_path.stem}.png"
+        _ = output_files[0].rename(final_output_path)
 
-            # Clean up temporary directories
-            import shutil
+        # Clean up temporary directories
+        import shutil
 
-            shutil.rmtree(temp_input_dir)
-            shutil.rmtree(temp_output_dir)
+        shutil.rmtree(temp_input_dir)
+        shutil.rmtree(temp_output_dir)
 
-            return [final_output_path]
-
-        except Exception as e:
-            # Fallback to simpler approach if DiffBIR fails
-            try:
-                return self._simple_upscale(image_path, output_dir, scale)
-            except Exception as fallback_error:
-                raise RuntimeError(
-                    f"DiffBIR super-resolution failed: {e}. Fallback also failed: {fallback_error}"
-                )
+        return [final_output_path]
 
     def _simple_upscale(
         self, image_path: Path, output_dir: Path, scale: int
@@ -225,13 +202,3 @@ class DiffBIRModel(BaseProcessingModel):
     def get_description(self) -> str:
         """Get model description."""
         return f"DiffBIR super-resolution model (version: {self.version}, scale factor: {self.scale}x)"
-
-    def get_requirements(self) -> Dict[str, Any]:
-        """Get model requirements."""
-        return {
-            "dependencies": ["torch", "diffbir", "omegaconf", "accelerate", "xformers"],
-            "model_size": "~2GB (DiffBIR v2.1)",
-            "device": "CUDA recommended for speed",
-            "memory": "~4GB VRAM for 4x upscaling",
-            "version": self.version,
-        }

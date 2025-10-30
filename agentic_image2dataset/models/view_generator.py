@@ -96,49 +96,36 @@ class StableVirtualCameraModel(BaseProcessingModel):
         input_Ks = [Ks[0]]  # Use first camera intrinsics
 
         # Generate views
-        try:
-            generated_images = self._run_one_scene(
-                model=self.model,
-                input_images=input_images,
-                input_c2ws=input_c2ws,
-                input_Ks=input_Ks,
-                target_c2ws=c2ws,
-                target_Ks=Ks,
-                device=self.device,
-                **kwargs,
-            )
+        generated_images = self._run_one_scene(
+            model=self.model,
+            input_images=input_images,
+            input_c2ws=input_c2ws,
+            input_Ks=input_Ks,
+            target_c2ws=c2ws,
+            target_Ks=Ks,
+            device=self.device,
+            **kwargs,
+        )
 
-            # Save generated images
-            output_paths = []
-            for i, gen_image in enumerate(generated_images):
-                if isinstance(gen_image, torch.Tensor):
-                    gen_image = gen_image.detach().cpu().numpy()
+        # Save generated images
+        output_paths = []
+        for i, gen_image in enumerate(generated_images):
+            if isinstance(gen_image, torch.Tensor):
+                gen_image = gen_image.detach().cpu().numpy()
 
-                # Convert to PIL Image format if needed
-                if gen_image.dtype != np.uint8:
-                    gen_image = (gen_image * 255).astype(np.uint8)
+            # Convert to PIL Image format if needed
+            if gen_image.dtype != np.uint8:
+                gen_image = (gen_image * 255).astype(np.uint8)
 
-                output_path = output_dir / f"view_{i:03d}.png"
-                save_image(gen_image, output_path)
-                output_paths.append(output_path)
+            output_path = output_dir / f"view_{i:03d}.png"
+            save_image(gen_image, output_path)
+            output_paths.append(output_path)
 
-            return output_paths
-
-        except Exception as e:
-            raise RuntimeError(f"Failed to generate views: {e}")
+        return output_paths
 
     def get_description(self) -> str:
         """Get model description."""
         return "Stable Virtual Camera model for generating novel views from a single input image"
-
-    def get_requirements(self) -> dict[str, object]:
-        """Get model requirements."""
-        return {
-            "dependencies": ["torch", "numpy", "PIL"],
-            "model_size": "~5GB",
-            "device": "CUDA recommended",
-            "stable_virtual_camera": "Must be installed and accessible",
-        }
 
     def _get_recommended_view_count(self, width: int, height: int) -> int:
         """Get recommended number of views based on image size."""

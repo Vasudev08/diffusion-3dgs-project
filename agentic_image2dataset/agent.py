@@ -9,7 +9,7 @@ from langchain.agents import AgentExecutor, create_openai_functions_agent
 from langchain.memory import ConversationBufferWindowMemory
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.tools import BaseTool
-from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 from .config import LLMConfig
 from .models.base import ModelRegistry
@@ -33,20 +33,17 @@ class ImageAnalysisTool(BaseTool):
 
     def _run(self, query: str = "") -> str:
         """Analyze the input image."""
-        try:
-            analysis = analyze_image_quality(self.image_path)
-            issues = detect_image_issues(self.image_path)
+        analysis = analyze_image_quality(self.image_path)
+        issues = detect_image_issues(self.image_path)
 
-            result = {
-                "analysis": analysis,
-                "issues": issues,
-                "suggested_processing_order": suggest_processing_order(analysis),
-                "optimal_view_count": get_optimal_view_count(analysis),
-            }
+        result = {
+            "analysis": analysis,
+            "issues": issues,
+            "suggested_processing_order": suggest_processing_order(analysis),
+            "optimal_view_count": get_optimal_view_count(analysis),
+        }
 
-            return json.dumps(result, indent=2)
-        except Exception as e:
-            return f"Error analyzing image: {str(e)}"
+        return json.dumps(result, indent=2)
 
     async def _arun(self, query: str = "") -> str:
         return self._run(query)
@@ -58,36 +55,36 @@ class ModelExecutionTool(BaseTool):
     name: str = "execute_model"
     description: str = "Execute a processing model on the input image"
     model_registry: ModelRegistry
+    input_path: Path
     output_dir: Path
 
     def __init__(
-        self, model_registry: ModelRegistry, output_dir: Path, **kwargs: object
+        self,
+        model_registry: ModelRegistry,
+        input_path: Path,
+        output_dir: Path,
+        **kwargs: object,
     ):
-        super().__init__(model_registry=model_registry, output_dir=output_dir, **kwargs)
+        super().__init__(
+            model_registry=model_registry,
+            input_path=input_path,
+            output_dir=output_dir,
+            **kwargs,
+        )
 
     def _run(self, model_name: str, parameters: str = "{}") -> str:
         """Execute a model with given parameters."""
-        try:
-            model = self.model_registry.get(model_name)
-            if model is None:
-                return f"Model '{model_name}' not found. Available models: {self.model_registry.list_available()}"
+        model = self.model_registry.get(model_name)
+        if model is None:
+            return f"Model '{model_name}' not found. Available models: {self.model_registry.list_available()}"
 
-            if not model.is_available():
-                return f"Model '{model_name}' is not available (missing dependencies)"
+        # Parse parameters
+        params: dict[str, object] = json.loads(parameters)
 
-            # Parse parameters
-            params: dict[str, object] = json.loads(parameters)
+        # Execute the model
+        results = model.process(self.input_path, self.output_dir, **params)
 
-            # Execute the model
-            input_path = (
-                self.output_dir.parent / "input_image.jpg"
-            )  # Assume input is saved here
-            results = model.process(input_path, self.output_dir, **params)
-
-            return f"Model '{model_name}' executed successfully. Generated {len(results)} outputs: {[str(p) for p in results]}"
-
-        except Exception as e:
-            return f"Error executing model '{model_name}': {str(e)}"
+        return f"Model '{model_name}' executed successfully. Generated {len(results)} outputs: {[str(p) for p in results]}"
 
     async def _arun(self, model_name: str, parameters: str = "{}") -> str:
         return self._run(model_name, parameters)
@@ -101,10 +98,10 @@ class AgenticImageProcessor:
         self.model_registry: ModelRegistry = model_registry
 
         # Initialize LLM
-        self.llm: ChatOpenAI = ChatOpenAI(
+        self.llm: ChatGoogleGenerativeAI = ChatGoogleGenerativeAI(
             model=config.model_name,
             temperature=config.temperature,
-            max_completion_tokens=config.max_tokens,
+            max_output_tokens=config.max_tokens,
             api_key=config.api_key,
         )
 
@@ -171,7 +168,7 @@ Always explain your reasoning and provide clear feedback on the processing steps
         """Add tools to the agent."""
         self.tools = [
             ImageAnalysisTool(image_path),
-            ModelExecutionTool(self.model_registry, output_dir),
+            ModelExecutionTool(self.model_registry, image_path, output_dir),
         ]
 
         # Recreate agent with new tools
@@ -198,11 +195,8 @@ Consider:
 Provide a detailed plan with reasoning for each decision.
 """
 
-        try:
-            response = self.agent.invoke({"input": planning_prompt})
-            return {"plan": response["output"], "success": True}
-        except Exception as e:
-            return {"plan": f"Planning failed: {str(e)}", "success": False}
+        response = self.agent.invoke({"input": planning_prompt})
+        return {"plan": response["output"], "success": True}
 
     def execute_plan(self, plan_description: str) -> dict[str, str | bool]:
         """Execute the processing plan."""
@@ -219,8 +213,5 @@ Use the available tools to:
 Be systematic and check the results of each step before proceeding.
 """
 
-        try:
-            response = self.agent.invoke({"input": execution_prompt})
-            return {"result": response["output"], "success": True}
-        except Exception as e:
-            return {"result": f"Execution failed: {str(e)}", "success": False}
+        response = self.agent.invoke({"input": execution_prompt})
+        return {"result": response["output"], "success": True}
