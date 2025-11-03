@@ -7,6 +7,8 @@ and type hints so you can implement each step incrementally. See
 
 Typical order of calls
 - generate_views() → generate_transforms() → train_splatfco() → export_ply()
+ - generate_views() → generate_transforms() → train_splatfco() → export_ply()
+ - Alternatively for real multi-view: multiview_colmap() → train_splatfco() → export_ply()
 
 Folder layout (as referenced by parameters)
 - datasets/<object>/source/            # original single image
@@ -124,6 +126,71 @@ def generate_transforms(
     return Path(transforms_path)
 
 
+def multiview_colmap(
+    image_sets: Sequence[PathLike] | PathLike,
+    dataset_dir: PathLike,
+    *,
+    matcher: str = "sequential",
+    camera_model: str = "OPENCV",
+    camera_params: Optional[Sequence[float]] = None,
+    use_gpu: bool = True,
+    image_downscale: Optional[int] = None,
+    colmap_cmd: str = "colmap",
+    ns_process: bool = True,
+    work_dir: Optional[PathLike] = None,
+    force: bool = True,
+) -> Path:
+    """Run COLMAP on one or more image folders and produce Nerfstudio transforms.
+
+    Purpose
+    - Take real or generated multi-view images, run feature extraction + matching +
+      SfM reconstruction with COLMAP, and write a Nerfstudio-ready dataset under
+      `dataset_dir` containing `images/` and `transforms.json`.
+
+    Parameters
+    - image_sets: Either a single images directory or a sequence of directories.
+      You can pass multiple folders if you have separate capture sets to merge.
+    - dataset_dir: Output root for the processed dataset. Expected to contain
+      an `images/` folder and a `transforms.json` after processing.
+    - matcher: COLMAP matching strategy (e.g., "sequential", "exhaustive", "vocab_tree").
+    - camera_model: Camera model for feature extraction (e.g., "PINHOLE", "OPENCV").
+    - camera_params: Optional explicit camera params list if you want to fix intrinsics.
+    - use_gpu: Use GPU-accelerated extraction/matching if available.
+    - image_downscale: Optional integer downscale factor to speed up COLMAP.
+    - colmap_cmd: Name or path to the COLMAP executable.
+    - ns_process: If True, prefer Nerfstudio's `ns-process-data` wrapper to produce
+      transforms.json directly from images with COLMAP under the hood.
+    - work_dir: Optional scratch directory for COLMAP DB and intermediate outputs.
+      Defaults to `<dataset_dir>/colmap/`.
+    - force: Overwrite existing outputs (`transforms.json`, copied images) if True.
+
+    Returns
+    - Path to the written `transforms.json` under `dataset_dir`.
+
+    Notes
+    - Two common implementations:
+      1) Use `ns-process-data images --data <images_dir> --output-dir <dataset_dir>` with
+         flags for downscale etc. This is the simplest when Nerfstudio is present.
+      2) Call COLMAP CLI directly (feature_extractor, matcher, mapper, model_converter),
+         then convert to Nerfstudio transforms (requires a conversion step or Nerfstudio
+         utilities). Keep logs in `results/<object>/logs/` or `<dataset_dir>/logs/`.
+    - Ensure that `dataset_dir/images/` contains the actual images (copy or symlink) that
+      `transforms.json` will reference with relative paths like `images/<file>`.
+    - After this step, proceed with `train_splatfco(dataset_dir, ...)` and `export_ply(...)`.
+    """
+    # TODO: Implement COLMAP orchestration.
+    # Suggested steps:
+    # 1) Normalize image_sets to a list[Path]
+    # 2) Prepare dataset_dir and a working directory for COLMAP (db, sparse, dense)
+    # 3) Either:
+    #    a) If ns_process: call `ns-process-data images --data <merged_images_dir>`
+    #       with downscale/matcher options if supported, writing transforms.json
+    #    b) Else: run COLMAP CLI stages, then convert/emit transforms.json
+    # 4) Copy/symlink all images into dataset_dir/images/ (flat) in stable order
+    # 5) Return Path(dataset_dir) / "transforms.json"
+    return Path(dataset_dir) / "transforms.json"
+
+
 def train_splatfco(
     dataset_dir: PathLike,
     results_dir: PathLike,
@@ -210,4 +277,3 @@ def export_ply(
     # TODO: Implement export logic via `ns-export`.
     # For now, return the provided output path as a Path object.
     return Path(out_ply_path)
-
