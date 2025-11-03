@@ -127,17 +127,13 @@ def generate_transforms(
 
 
 def multiview_colmap(
-    image_sets: Sequence[PathLike] | PathLike,
+    image_sets: PathLike,
     dataset_dir: PathLike,
     *,
-    matcher: str = "sequential",
-    camera_model: str = "OPENCV",
-    camera_params: Optional[Sequence[float]] = None,
+    matcher: str = "exhaustive",
     use_gpu: bool = True,
-    image_downscale: Optional[int] = None,
     colmap_cmd: str = "colmap",
     ns_process: bool = True,
-    work_dir: Optional[PathLike] = None,
     force: bool = True,
 ) -> Path:
     """Run COLMAP on one or more image folders and produce Nerfstudio transforms.
@@ -154,126 +150,239 @@ def multiview_colmap(
       an `images/` folder and a `transforms.json` after processing.
     - matcher: COLMAP matching strategy (e.g., "sequential", "exhaustive", "vocab_tree").
     - camera_model: Camera model for feature extraction (e.g., "PINHOLE", "OPENCV").
+    - single_camera: Assume shared intrinsics across all images (recommended for turntable/handheld).
     - camera_params: Optional explicit camera params list if you want to fix intrinsics.
     - use_gpu: Use GPU-accelerated extraction/matching if available.
     - image_downscale: Optional integer downscale factor to speed up COLMAP.
     - colmap_cmd: Name or path to the COLMAP executable.
     - ns_process: If True, prefer Nerfstudio's `ns-process-data` wrapper to produce
       transforms.json directly from images with COLMAP under the hood.
-    - work_dir: Optional scratch directory for COLMAP DB and intermediate outputs.
-      Defaults to `<dataset_dir>/colmap/`.
     - force: Overwrite existing outputs (`transforms.json`, copied images) if True.
 
     Returns
     - Path to the written `transforms.json` under `dataset_dir`.
 
-    Notes
-    - Two common implementations:
-      1) Use `ns-process-data images --data <images_dir> --output-dir <dataset_dir>` with
-         flags for downscale etc. This is the simplest when Nerfstudio is present.
-      2) Call COLMAP CLI directly (feature_extractor, matcher, mapper, model_converter),
-         then convert to Nerfstudio transforms (requires a conversion step or Nerfstudio
-         utilities). Keep logs in `results/<object>/logs/` or `<dataset_dir>/logs/`.
-    - Ensure that `dataset_dir/images/` contains the actual images (copy or symlink) that
-      `transforms.json` will reference with relative paths like `images/<file>`.
-    - After this step, proceed with `train_splatfco(dataset_dir, ...)` and `export_ply(...)`.
     """
-    # TODO: Implement COLMAP orchestration.
-    # Suggested steps:
-    # 1) Normalize image_sets to a list[Path]
-    # 2) Prepare dataset_dir and a working directory for COLMAP (db, sparse, dense)
-    # 3) Either:
-    #    a) If ns_process: call `ns-process-data images --data <merged_images_dir>`
-    #       with downscale/matcher options if supported, writing transforms.json
-    #    b) Else: run COLMAP CLI stages, then convert/emit transforms.json
-    # 4) Copy/symlink all images into dataset_dir/images/ (flat) in stable order
-    # 5) Return Path(dataset_dir) / "transforms.json"
-    return Path(dataset_dir) / "transforms.json"
+    from datetime import datetime
+    import os
+    import subprocess
+
+    images_dir_p = Path(image_sets)
+    if not images_dir_p.exists() or not images_dir_p.is_dir():
+        raise FileNotFoundError(f"Images directory not found: {images_dir_p}")
+
+    dataset_dir_p = Path(dataset_dir)
+    logs_dir = dataset_dir_p / "logs"
+    dataset_dir_p.mkdir(parents=True, exist_ok=True)
+    logs_dir.mkdir(parents=True, exist_ok=True)
+
+    transforms_path = dataset_dir_p / "transforms.json"
+    if transforms_path.exists() and not force:
+        return transforms_path
+
+    if not ns_process:
+        raise NotImplementedError("Direct COLMAP orchestration not implemented; set ns_process=True.")
+
+    cmd: List[str] = [
+        "ns-process-data",
+        "images",
+        "--data",
+        str(images_dir_p),
+        "--output-dir",
+        str(dataset_dir_p),
+        "--matching-method",
+        str(matcher),
+        "--sfm-tool",
+        "colmap",
+        "--no-gpu",
+    ]
+
+    log_file = logs_dir / f"ns_process_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    with log_file.open("w", encoding="utf-8") as lf:
+        lf.write("Command: " + " ".join(cmd) + "\n\n")
+        proc = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+            text=True,
+            env=os.environ,
+        )
+        if proc.stdout is not None:
+            lf.write(proc.stdout)
+
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"ns-process-data failed with exit code {proc.returncode}. See log: {log_file}"
+        )
+
+    if not transforms_path.exists():
+        raise RuntimeError(
+            f"Expected transforms.json not found at {transforms_path}. See log: {log_file}"
+        )
+
+    return transforms_path
 
 
-def train_splatfco(
+def train_splatfacto(
     dataset_dir: PathLike,
     results_dir: PathLike,
-    *,
-    max_steps: Optional[int] = None,
-    camera_opt: Optional[str] = "SO3xR3",
-    resume: bool = False,
-    experiment_name: Optional[str] = None,
-    device: Optional[str] = None,
-    extra_args: Optional[Sequence[str]] = None,
 ) -> Dict[str, Path]:
     """Train Nerfstudio Splatfacto on the prepared dataset.
 
-    Purpose
-    - Launch `ns-train splatfacto --data <dataset_dir>` and store outputs under
-      `results_dir`. Return key artifacts (config, checkpoint, run directory).
-
-    Parameters
-    - dataset_dir: Dataset root containing `images/` and `transforms.json`.
-    - results_dir: Directory to store training runs, logs, checkpoints, summaries.
-    - max_steps: Optional training step cap (maps to a trainer or pipeline arg).
-    - camera_opt: Camera optimizer mode (e.g., "SO3xR3") for minor pose refinement.
-    - resume: If True, resume from the most recent run/checkpoint if present.
-    - experiment_name: Optional friendly name; otherwise derive from timestamp/object.
-    - device: Optional device selector (e.g., "cuda:0"), if you route to Python API.
-    - extra_args: Additional flags to pass through to `ns-train` for advanced control.
-
-    Returns
-    - Dict with important paths, for example:
-      {
-        "run_dir": Path(...),
-        "config": Path(.../config.yml),
-        "checkpoint": Path(.../checkpoints/step_xxx.ckpt),
-      }
-
-    Notes
-    - In a CLI-based implementation, prefer capturing stdout/stderr to log files under
-      results_dir/logs/ and surfacing a concise summary here.
-    - Keep idempotency in mind: if a finished run exists and `resume=False`, start a
-      new run; if `resume=True`, continue if possible.
+    - Runs: ns-train splatfacto --data <dataset_dir> --output-dir <results_dir>
+    - Captures logs to <results_dir>/logs/ns_train_*.log
+    - Returns discovered paths to run_dir, config, and checkpoint (best effort).
     """
-    # TODO: Implement `ns-train` invocation or Python API integration.
-    # For now, return a placeholder dict of Paths.
+    from datetime import datetime
+    import os
+    import subprocess
+
+    dataset_dir_p = Path(dataset_dir)
+    results_dir_p = Path(results_dir)
+    if not dataset_dir_p.exists():
+        raise FileNotFoundError(f"dataset_dir not found: {dataset_dir_p}")
+
+    logs_dir = results_dir_p / "logs"
+    results_dir_p.mkdir(parents=True, exist_ok=True)
+    logs_dir.mkdir(parents=True, exist_ok=True)
+
+    cmd: List[str] = [
+        "ns-train",
+        "splatfacto",
+        "--data",
+        str(dataset_dir_p),
+        "--output-dir",
+        str(results_dir_p),
+    ]
+
+    log_file = logs_dir / f"ns_train_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    with log_file.open("w", encoding="utf-8") as lf:
+        lf.write("Command: " + " ".join(cmd) + "\n\n")
+        proc = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+            text=True,
+            env=os.environ,
+        )
+        if proc.stdout is not None:
+            lf.write(proc.stdout)
+
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"ns-train failed with exit code {proc.returncode}. See log: {log_file}"
+        )
+
+    # Attempt to discover the created run directory and artifacts
+    def _latest_dir(base: Path) -> Optional[Path]:
+        dirs = [d for d in base.iterdir() if d.is_dir()]
+        return max(dirs, key=lambda p: p.stat().st_mtime) if dirs else None
+
+    run_dir = _latest_dir(results_dir_p)
+    # Some layouts nest by experiment name → timestamp; descend one level if applicable
+    if run_dir and any(child.is_dir() for child in run_dir.iterdir()):
+        nested = _latest_dir(run_dir)
+        if nested:
+            run_dir = nested
+
+    config_path: Optional[Path] = None
+    checkpoint_path: Optional[Path] = None
+    if run_dir:
+        for name in ("config.yml", "config.yaml"):
+            cand = run_dir / name
+            if cand.exists():
+                config_path = cand
+                break
+        ckpt_dir = run_dir / "checkpoints"
+        if ckpt_dir.exists():
+            ckpts = sorted(ckpt_dir.glob("*"), key=lambda p: p.stat().st_mtime, reverse=True)
+            if ckpts:
+                checkpoint_path = ckpts[0]
+
     return {
-        "run_dir": Path(results_dir),
-        "config": Path(results_dir) / "config.yml",
-        "checkpoint": Path(results_dir) / "checkpoints" / "latest.ckpt",
+        "run_dir": run_dir or results_dir_p,
+        "config": config_path or (results_dir_p / "config.yml"),
+        "checkpoint": checkpoint_path or (results_dir_p / "checkpoints" / "latest.ckpt"),
     }
 
 
 def export_ply(
     config_or_checkpoint: PathLike,
     out_ply_path: PathLike,
-    *,
-    export_type: str = "pointcloud",
-    quality: Optional[str] = None,
-    extra_flags: Optional[Sequence[str]] = None,
     force: bool = True,
 ) -> Path:
-    """Export a PLY asset (e.g., point cloud) from a trained run.
+    """Export Gaussian Splats using Nerfstudio's exporter to an output directory.
 
-    Purpose
-    - Use Nerfstudio's export tools (e.g., `ns-export pointcloud`) to produce a PLY
-      from a config file or checkpoint produced by training.
+    - Runs: ns-export gaussian-splat --load-config <config.yml> --output-dir <out_dir>
+    - Returns the output directory path.
 
     Parameters
-    - config_or_checkpoint: Path to a Nerfstudio config (yaml) or checkpoint file.
-    - out_ply_path: Destination PLY file path to write.
-    - export_type: What to export (e.g., "pointcloud"). Some versions support
-      gaussian splats or meshes; choose based on your Nerfstudio version.
-    - quality: Optional quality preset or density thresholding parameter if supported.
-    - extra_flags: Additional CLI flags to pass through to export for advanced control.
-    - force: Overwrite the output file if it already exists.
-
-    Returns
-    - Path to the written PLY file.
-
-    Notes
-    - Exact CLI can vary by Nerfstudio release. Common pattern:
-      ns-export pointcloud --load-config <config.yml> --output <out.ply>
-    - Validate that `config_or_checkpoint` exists and that `ns-export` is available
-      in the active environment before invoking.
+    - config_or_checkpoint: Path to the run directory containing config.yml, or directly
+      to a config.yml/.yaml. If a checkpoint is given, tries to resolve sibling config.
+    - out_ply_path: Output directory path for exported assets.
+    - force: Currently not used to delete/overwrite; directory is created if missing.
     """
-    # TODO: Implement export logic via `ns-export`.
-    # For now, return the provided output path as a Path object.
-    return Path(out_ply_path)
+    from datetime import datetime
+    import os
+    import subprocess
+
+    out_dir = Path(out_ply_path)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    logs_dir = out_dir / "logs"
+    logs_dir.mkdir(parents=True, exist_ok=True)
+
+    cfg_input = Path(config_or_checkpoint)
+    config_path: Optional[Path] = None
+    if cfg_input.is_dir():
+        for name in ("config.yml", "config.yaml"):
+            cand = cfg_input / name
+            if cand.exists():
+                config_path = cand
+                break
+    elif cfg_input.is_file():
+        if cfg_input.suffix.lower() in {".yml", ".yaml"}:
+            config_path = cfg_input
+        else:
+            parent = cfg_input.parent
+            for name in ("config.yml", "config.yaml"):
+                cand = parent / name
+                if cand.exists():
+                    config_path = cand
+                    break
+
+    if not config_path or not config_path.exists():
+        raise FileNotFoundError(
+            f"Could not resolve a Nerfstudio config file from: {cfg_input}"
+        )
+
+    cmd: List[str] = [
+        "ns-export",
+        "gaussian-splat",
+        "--load-config",
+        str(config_path),
+        "--output-dir",
+        str(out_dir),
+    ]
+
+    log_file = logs_dir / f"ns_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    with log_file.open("w", encoding="utf-8") as lf:
+        lf.write("Command: " + " ".join(cmd) + "\n\n")
+        proc = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+            text=True,
+            env=os.environ,
+        )
+        if proc.stdout is not None:
+            lf.write(proc.stdout)
+
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"ns-export failed with exit code {proc.returncode}. See log: {log_file}"
+        )
+
+    return out_dir

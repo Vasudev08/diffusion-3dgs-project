@@ -17,6 +17,31 @@ __pycache__/
 
 .vscode/
 uv.lock
-*.png
-*.jpg
 weights/
+
+# Project data and artifacts (keep structure, ignore contents)
+datasets/**
+!datasets/
+!datasets/.gitkeep
+!datasets/README.md
+
+datasets_raw/**
+!datasets_raw/
+!datasets_raw/.gitkeep
+!datasets_raw/README.md
+
+results/**
+!results/
+!results/.gitkeep
+!results/README.md
+
+# Large artifacts and logs
+*.ckpt
+*.ply
+*.mp4
+*.avi
+*.mov
+*.log
+.pytest_cache/
+.env
+.venv/
