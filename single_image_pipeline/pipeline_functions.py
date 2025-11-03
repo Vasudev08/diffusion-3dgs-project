@@ -256,6 +256,8 @@ def train_splatfacto(
         str(results_dir_p),
     ]
 
+    cmd += ["--max-num-iterations", "10000", "--steps-per-save", "1000"]
+
     log_file = logs_dir / f"ns_train_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
     with log_file.open("w", encoding="utf-8") as lf:
         lf.write("Command: " + " ".join(cmd) + "\n\n")
