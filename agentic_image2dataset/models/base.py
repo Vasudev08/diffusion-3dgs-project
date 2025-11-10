@@ -4,7 +4,7 @@ Base classes for processing models in the agentic pipeline.
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Callable, Dict, List, Optional, Union
 
 import numpy as np
 from PIL import Image
@@ -16,19 +16,6 @@ class BaseProcessingModel(ABC):
     def __init__(self, device: str = "cuda", **kwargs):
         self.device = device
         self.config = kwargs
-
-    @abstractmethod
-    def analyze(self, image_path: Union[str, Path]) -> Dict[str, Any]:
-        """
-        Analyze an image and return metadata about its characteristics.
-
-        Args:
-            image_path: Path to the input image
-
-        Returns:
-            Dictionary containing analysis results
-        """
-        pass
 
     @abstractmethod
     def process(
@@ -54,26 +41,76 @@ class BaseProcessingModel(ABC):
 
 
 class ModelRegistry:
-    """Registry for managing available processing models."""
+    """Registry for managing available processing models with lazy initialization and role-based organization."""
 
     def __init__(self):
-        self._models: Dict[str, BaseProcessingModel] = {}
+        self._model_factories: Dict[str, Callable[[], BaseProcessingModel]] = {}
+        self._model_roles: Dict[str, str] = {}  # Maps model name to role
+        self._role_registries: Dict[
+            str, List[str]
+        ] = {}  # Maps role to list of model names
 
-    def register(self, name: str, model: BaseProcessingModel):
-        """Register a model with the given name."""
-        self._models[name] = model
+    def register(
+        self,
+        name: str,
+        model_factory: Callable[[], BaseProcessingModel],
+        role: Optional[str] = None,
+    ):
+        """
+        Register a model factory function.
+
+        Args:
+            name: Name to register the model under (should be the actual model name)
+            model_factory: Callable that returns a BaseProcessingModel instance
+            role: Optional role/category for the model (e.g., "super_resolution", "view_generation")
+        """
+        self._model_factories[name] = model_factory
+        if role:
+            self._model_roles[name] = role
+            if role not in self._role_registries:
+                self._role_registries[role] = []
+            self._role_registries[role].append(name)
 
     def get(self, name: str) -> Optional[BaseProcessingModel]:
-        """Get a model by name."""
-        return self._models.get(name)
+        """
+        Get a model by name, creating a new instance each time.
+
+        Args:
+            name: Name of the model to get
+
+        Returns:
+            A new model instance, or None if not found
+        """
+        if name not in self._model_factories:
+            return None
+
+        # Create a new model instance each time
+        return self._model_factories[name]()
 
     def list_available(self) -> List[str]:
-        """List names of available models."""
-        return [name for name, model in self._models.items()]
+        """List names of all available models."""
+        return list(self._model_factories.keys())
+
+    def list_by_role(self, role: str) -> List[str]:
+        """List names of models in a specific role/category."""
+        return self._role_registries.get(role, [])
+
+    def get_role(self, model_name: str) -> Optional[str]:
+        """Get the role/category of a model."""
+        return self._model_roles.get(model_name)
+
+    def get_all_roles(self) -> Dict[str, List[str]]:
+        """Get all roles and their associated models."""
+        return dict(self._role_registries)
 
     def get_all(self) -> Dict[str, BaseProcessingModel]:
-        """Get all registered models."""
-        return self._models.copy()
+        """Get all registered models, creating new instances."""
+        result = {}
+        for name in self._model_factories.keys():
+            model = self.get(name)
+            if model is not None:
+                result[name] = model
+        return result
 
 
 def load_image(image_path: Union[str, Path]) -> np.ndarray:

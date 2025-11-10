@@ -3,13 +3,16 @@ LangChain agent for orchestrating the image processing pipeline.
 """
 
 import json
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Dict, List, Optional
 
 from langchain.agents import AgentExecutor, create_openai_functions_agent
 from langchain.memory import ConversationBufferWindowMemory
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.tools import BaseTool
 from langchain_google_genai import ChatGoogleGenerativeAI
+from pydantic import BaseModel, Field
 
 from .config import LLMConfig
 from .models.base import ModelRegistry
@@ -19,6 +22,24 @@ from .utils import (
     get_optimal_view_count,
     suggest_processing_order,
 )
+
+
+@dataclass
+class ModelGuidance:
+    """Guidance for choosing between models in a role."""
+
+    model_name: str
+    guidance_text: str
+
+
+@dataclass
+class RoleConfiguration:
+    """Configuration for a model role in the prompt."""
+
+    display_name: str
+    general_guidance: Optional[str] = None
+    model_guidance: List[ModelGuidance] = field(default_factory=list)
+    shared_notes: Optional[str] = None
 
 
 class ImageAnalysisTool(BaseTool):
@@ -45,15 +66,23 @@ class ImageAnalysisTool(BaseTool):
 
         return json.dumps(result, indent=2)
 
-    async def _arun(self, query: str = "") -> str:
-        return self._run(query)
+
+class ModelExecutionToolArgs(BaseModel):
+    """Arguments for the model execution tool."""
+
+    model_name: str = Field(description="The name of the model to execute")
+    parameters: str = Field(
+        default="{}",
+        description='Model parameters in JSON format. Must be a valid JSON string. Example: \'{"scale": 4, "batch_size": 1}\'',
+    )
 
 
 class ModelExecutionTool(BaseTool):
     """Tool for executing processing models."""
 
     name: str = "execute_model"
-    description: str = "Execute a processing model on the input image"
+    description: str = "Execute a processing model on the input image. The 'parameters' argument must be provided as a JSON string."
+    args_schema = ModelExecutionToolArgs
     model_registry: ModelRegistry
     input_path: Path
     output_dir: Path
@@ -86,9 +115,6 @@ class ModelExecutionTool(BaseTool):
 
         return f"Model '{model_name}' executed successfully. Generated {len(results)} outputs: {[str(p) for p in results]}"
 
-    async def _arun(self, model_name: str, parameters: str = "{}") -> str:
-        return self._run(model_name, parameters)
-
 
 class AgenticImageProcessor:
     """LangChain-based agent for orchestrating image processing."""
@@ -116,11 +142,88 @@ class AgenticImageProcessor:
         # Create agent
         self.agent: AgentExecutor = self._create_agent()
 
+    def _get_role_configurations(self) -> Dict[str, RoleConfiguration]:
+        """Get structured configurations for each role."""
+        return {
+            "view_generation": RoleConfiguration(
+                display_name="View Generation Models",
+                general_guidance=None,
+                model_guidance=[],
+            ),
+            "super_resolution": RoleConfiguration(
+                display_name="Super-Resolution Models",
+                general_guidance="When choosing between super-resolution models:",
+                model_guidance=[
+                    ModelGuidance(
+                        model_name="diffbir",
+                        guidance_text="Use 'diffbir' for maximum quality when computational resources allow",
+                    ),
+                    ModelGuidance(
+                        model_name="adcsr",
+                        guidance_text="Use 'adcsr' for faster processing with competitive quality",
+                    ),
+                ],
+                shared_notes="Both models support 4x upscaling by default",
+            ),
+        }
+
+    def _build_model_descriptions(self, roles: Dict[str, List[str]]) -> str:
+        """Build model descriptions from role configurations."""
+        role_configs = self._get_role_configurations()
+        model_descriptions = []
+
+        for role_key, model_names in roles.items():
+            config = role_configs.get(role_key)
+            if not config:
+                # Fallback for roles without explicit configuration
+                config = RoleConfiguration(
+                    display_name=role_key.replace("_", " ").title() + " Models"
+                )
+
+            # Add role header
+            model_descriptions.append(f"{config.display_name}:")
+
+            # Add individual model descriptions
+            for model_name in model_names:
+                model = self.model_registry.get(model_name)
+                if model:
+                    model_descriptions.append(
+                        f"  - {model_name}: {model.get_description()}"
+                    )
+
+            # Add general guidance if present
+            if config.general_guidance:
+                model_descriptions.append(f"\n{config.general_guidance}")
+
+            # Add model-specific guidance
+            if config.model_guidance:
+                for guidance in config.model_guidance:
+                    if guidance.model_name in model_names:
+                        model_descriptions.append(f"  - {guidance.guidance_text}")
+
+            # Add shared notes if present
+            if config.shared_notes:
+                model_descriptions.append(f"  - {config.shared_notes}")
+
+            # Add spacing between roles
+            model_descriptions.append("")
+
+        return (
+            "\n".join(model_descriptions).strip()
+            if model_descriptions
+            else "No models available."
+        )
+
     def _create_agent(self) -> AgentExecutor:
         """Create the LangChain agent."""
 
-        # Define the system prompt
-        system_prompt = """You are an expert image processing agent that specializes in creating 3D Gaussian Splatting datasets from single input images.
+        # Get available models and organize by role
+        roles = self.model_registry.get_all_roles()
+
+        # Build model descriptions using structured configurations
+        models_text = self._build_model_descriptions(roles)
+
+        system_prompt = f"""You are an expert image processing agent that specializes in creating 3D Gaussian Splatting datasets from single input images.
 
 Your task is to:
 1. Analyze the input image to understand its characteristics and quality
@@ -129,14 +232,14 @@ Your task is to:
 4. Ensure the final output is suitable for 3DGS training
 
 Available processing models:
-- view_generation: Generate multiple novel views from a single image using Stable Virtual Camera
-- super_resolution: Enhance image quality using Real-ESRGAN
+{models_text}
 
 Processing decisions should consider:
 - Image resolution and quality
 - Scene complexity and content
 - Blur, brightness, and contrast issues
 - Optimal number of views for 3DGS training
+- Available computational resources and time constraints
 
 Always explain your reasoning and provide clear feedback on the processing steps."""
 

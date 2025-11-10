@@ -3,7 +3,7 @@ Processing models for the agentic pipeline.
 """
 
 from .base import BaseProcessingModel, ModelRegistry
-from .super_resolution import DiffBIRModel
+from .super_resolution import AdcSRModel, DiffBIRModel
 from .view_generator import StableVirtualCameraModel
 
 __all__ = [
@@ -11,4 +11,5 @@ __all__ = [
     "ModelRegistry",
     "StableVirtualCameraModel",
     "DiffBIRModel",
+    "AdcSRModel",
 ]

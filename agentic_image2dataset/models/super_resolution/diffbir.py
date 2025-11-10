@@ -4,19 +4,20 @@ DiffBIR model wrapper for super-resolution.
 
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import List, Optional, Union
 
 import numpy as np
 from PIL import Image
 
-from .base import BaseProcessingModel, load_image
+from ..base import BaseProcessingModel, load_image
 
 # Add DiffBIR to path
-DIFFBIR_PATH = Path(__file__).parent.parent.parent / "DiffBIR"
+DIFFBIR_PATH = Path(__file__).parent.parent.parent.parent / "DiffBIR"
 if str(DIFFBIR_PATH) not in sys.path:
     sys.path.insert(0, str(DIFFBIR_PATH))
 
-from diffbir.inference import BSRInferenceLoop
+# Import after path modifications
+from diffbir.inference import BSRInferenceLoop  # type: ignore
 
 
 class DiffBIRModel(BaseProcessingModel):
@@ -29,10 +30,14 @@ class DiffBIRModel(BaseProcessingModel):
         self.scale: int = scale
         self.device: str = device
         self.version: str = version
-        self.inference_loop: Optional[BSRInferenceLoop] = None
+        self._inference_loop: Optional[BSRInferenceLoop] = None  # Lazy initialization
 
-        # Initialize DiffBIR inference loop
-        self._setup_diffbir()
+    @property
+    def inference_loop(self) -> BSRInferenceLoop:
+        """Lazy load the DiffBIR inference loop when first accessed."""
+        if self._inference_loop is None:
+            self._setup_diffbir()
+        return self._inference_loop
 
     def _setup_diffbir(self) -> None:
         """Setup DiffBIR inference loop."""
@@ -80,42 +85,7 @@ class DiffBIRModel(BaseProcessingModel):
                 self.strength: float = 1
 
         args = MockArgs(self.device, self.scale, self.version)
-        self.inference_loop = BSRInferenceLoop(args)
-        self.inference_loop.load_cleaner()
-        self.inference_loop.load_pipeline()
-
-    def analyze(self, image_path: Union[str, Path]) -> Dict[str, Any]:
-        """Analyze image for super-resolution suitability."""
-        image_path = Path(image_path)
-        image = load_image(image_path)
-
-        height: int = image.shape[0]
-        width: int = image.shape[1]
-        total_pixels: int = width * height
-
-        analysis = {
-            "width": width,
-            "height": height,
-            "total_pixels": total_pixels,
-            "current_resolution": f"{width}x{height}",
-            "upscaled_resolution": f"{width * self.scale}x{height * self.scale}",
-            "would_benefit_from_sr": total_pixels < 1024 * 1024,  # Less than 1MP
-            "recommended_scale": self.scale,
-            "model_version": self.version,
-        }
-
-        # Determine if super-resolution would be beneficial
-        if total_pixels < 256 * 256:
-            analysis["sr_priority"] = "high"
-            analysis["sr_benefit"] = "significant"
-        elif total_pixels < 512 * 512:
-            analysis["sr_priority"] = "medium"
-            analysis["sr_benefit"] = "moderate"
-        else:
-            analysis["sr_priority"] = "low"
-            analysis["sr_benefit"] = "minimal"
-
-        return analysis
+        self._inference_loop = BSRInferenceLoop(args)
 
     def process(
         self,
@@ -150,10 +120,6 @@ class DiffBIRModel(BaseProcessingModel):
         temp_input_path = temp_input_dir / image_path.name
         pil_image.save(temp_input_path)
 
-        # Check if DiffBIR is available
-        if self.inference_loop is None:
-            raise RuntimeError("DiffBIR inference loop not initialized")
-
         # Update inference loop args for this specific scale
         self.inference_loop.args.upscale = scale
 
@@ -180,24 +146,6 @@ class DiffBIRModel(BaseProcessingModel):
         shutil.rmtree(temp_output_dir)
 
         return [final_output_path]
-
-    def _simple_upscale(
-        self, image_path: Path, output_dir: Path, scale: int
-    ) -> List[Path]:
-        """Simple upscaling fallback using PIL."""
-        image = load_image(image_path)
-
-        pil_image = Image.fromarray(image)
-
-        # Simple bicubic upscaling
-        new_size = (pil_image.width * scale, pil_image.height * scale)
-        upscaled = pil_image.resize(new_size, Image.Resampling.LANCZOS)
-
-        # Save result
-        output_path = output_dir / f"sr_{image_path.stem}.png"
-        upscaled.save(output_path)
-
-        return [output_path]
 
     def get_description(self) -> str:
         """Get model description."""

@@ -19,7 +19,7 @@ from pycolmap import (
 class COLMAPProcessor:
     """PyCOLMAP processor for automated reconstruction."""
 
-    def __init__(self, quality: str = "high", device: str = "cuda"):
+    def __init__(self, quality: str = "high", device: str = "cpu"):
         self.quality: str = quality
         self.device: str = device
         self.quality_settings: dict[str, Any] = self._get_quality_settings()
