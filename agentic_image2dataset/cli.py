@@ -26,7 +26,7 @@ Examples:
 
   # With custom settings
   python -m agentic_image2dataset.cli --input photo.jpg --output dataset/ \\
-    --num-views 36 --device cuda --llm-model gpt-4
+    --num-views 36 --device cuda --llm-model gemini-2.5-flash
 
   # Skip COLMAP preprocessing
   python -m agentic_image2dataset.cli --input photo.jpg --output dataset/ \\
@@ -46,14 +46,13 @@ Examples:
     # LLM configuration
     parser.add_argument(
         "--llm-model",
-        default="gpt-4",
-        choices=["gpt-4", "gpt-3.5-turbo", "claude-3-opus", "claude-3-sonnet"],
-        help="LLM model to use for planning",
+        default="gemini-2.5-flash",
+        help="LLM model to use for planning (e.g., gemini-2.5-flash, gemini-pro, gpt-4, claude-3-opus)",
     )
 
     parser.add_argument(
         "--llm-api-key",
-        help="API key for LLM (can also be set via environment variable)",
+        help="API key for LLM (can also be set via GOOGLE_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY environment variable)",
     )
 
     parser.add_argument(
@@ -148,7 +147,12 @@ Examples:
             print(f"Output directory: {result['output_dir']}")
 
             if result.get("issues"):
-                print(f"\n⚠️  Detected issues: {', '.join(result['issues'])}")
+                issues = result["issues"]
+                if isinstance(issues, list):
+                    issues_str = ", ".join(str(issue) for issue in issues)
+                else:
+                    issues_str = str(issues)
+                print(f"\n⚠️  Detected issues: {issues_str}")
         else:
             print(f"\n❌ Processing failed: {result['error']}")
             sys.exit(1)
@@ -164,12 +168,19 @@ Examples:
 def _create_config(args) -> PipelineConfig:
     """Create configuration from command line arguments."""
     # Get API key from args or environment
-    api_key = args.llm_api_key or _get_api_key_from_env(args.llm_model)
-    api_key = SecretStr(api_key) if api_key else None
+    api_key_str = args.llm_api_key or _get_api_key_from_env(args.llm_model)
 
-    llm_config = LLMConfig(
-        model_name=args.llm_model, api_key=api_key, temperature=args.llm_temperature
-    )
+    # Create LLM config - if api_key is provided, use it; otherwise use default from environment
+    if api_key_str:
+        api_key = SecretStr(api_key_str)
+        llm_config = LLMConfig(
+            model_name=args.llm_model, api_key=api_key, temperature=args.llm_temperature
+        )
+    else:
+        # Use default from environment (handled by LLMConfig default)
+        llm_config = LLMConfig(
+            model_name=args.llm_model, temperature=args.llm_temperature
+        )
 
     model_config = ModelConfig(
         device=args.device,
@@ -190,11 +201,15 @@ def _create_config(args) -> PipelineConfig:
 
 def _get_api_key_from_env(model_name: str) -> str:
     """Get API key from environment variables."""
-    if "gpt" in model_name.lower():
+    model_lower = model_name.lower()
+    if "gemini" in model_lower:
+        return os.getenv("GOOGLE_API_KEY", "")
+    elif "gpt" in model_lower:
         return os.getenv("OPENAI_API_KEY", "")
-    elif "claude" in model_name.lower():
+    elif "claude" in model_lower:
         return os.getenv("ANTHROPIC_API_KEY", "")
-    return ""
+    # Default to Google API key for backward compatibility
+    return os.getenv("GOOGLE_API_KEY", "")
 
 
 def _list_models():

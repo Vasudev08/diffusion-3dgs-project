@@ -18,7 +18,8 @@ A LangChain-based agentic pipeline for processing single input images into 3DGS-
 # Install dependencies
 pip install -e .
 
-# Set up API keys (choose one)
+# Set up API keys (choose one based on your LLM model)
+export GOOGLE_API_KEY="your-google-key"      # For Gemini models (default)
 export OPENAI_API_KEY="your-openai-key"      # For GPT models
 export ANTHROPIC_API_KEY="your-anthropic-key"  # For Claude models
 ```
@@ -43,7 +44,7 @@ python -m agentic_image2dataset.cli --input photo.jpg --output dataset/
 
 # With custom settings
 python -m agentic_image2dataset.cli --input photo.jpg --output dataset/ \
-  --num-views 36 --device cuda --llm-model gpt-4
+  --num-views 36 --device cuda --llm-model gemini-2.5-flash
 ```
 
 ### Python API
@@ -53,7 +54,7 @@ from agentic_image2dataset import AgenticPipeline, PipelineConfig, LLMConfig, Mo
 
 # Create configuration
 config = PipelineConfig(
-    llm=LLMConfig(model_name="gpt-4"),
+    llm=LLMConfig(model_name="gemini-2.5-flash"),
     model=ModelConfig(device="cuda", num_views=24),
     output_dir=Path("dataset/"),
     input_image=Path("photo.jpg")
@@ -102,9 +103,9 @@ print(f"Generated {result['generated_images']} images")
 
 ```python
 llm_config = LLMConfig(
-    model_name="gpt-4",           # or "gpt-3.5-turbo", "claude-3-opus"
-    api_key="your-api-key",       # or set via environment variable
-    temperature=0.1,              # Lower for more consistent planning
+    model_name="gemini-2.5-flash",  # or "gemini-pro", "gpt-4", "claude-3-opus"
+    api_key="your-api-key",         # or set via GOOGLE_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY
+    temperature=0.1,                # Lower for more consistent planning
     max_tokens=2000
 )
 ```
@@ -131,8 +132,9 @@ python -m agentic_image2dataset.cli --help
 --output, -o         Output directory
 
 # LLM Configuration
---llm-model          LLM model (gpt-4, gpt-3.5-turbo, claude-3-opus)
---llm-api-key        API key (or set via environment)
+--llm-model          LLM model (default: gemini-2.5-flash)
+                     # Examples: gemini-2.5-flash, gemini-pro, gpt-4, claude-3-opus
+--llm-api-key        API key (or set via GOOGLE_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY)
 --llm-temperature    LLM temperature (default: 0.1)
 
 # Model Configuration
@@ -205,7 +207,7 @@ pipeline.model_registry.register("my_model", MyCustomModel())
 
 ### Common Issues
 
-1. **Missing API Keys**: Set `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` environment variables
+1. **Missing API Keys**: Set `GOOGLE_API_KEY` (default), `OPENAI_API_KEY`, or `ANTHROPIC_API_KEY` environment variables
 2. **CUDA Out of Memory**: Use `--device cpu` or reduce `--num-views`
 3. **DiffBIR Model Loading**: Ensure DiffBIR dependencies are installed and models are downloaded
 4. **COLMAP Fails**: Try `--skip-colmap` or lower `--colmap-quality`
