@@ -2,23 +2,25 @@
 Configuration classes for the agentic pipeline.
 """
 
-import getpass
-import os
 from dataclasses import dataclass
 from pathlib import Path
-
-from pydantic import SecretStr
-
-if "GOOGLE_API_KEY" not in os.environ:
-    os.environ["GOOGLE_API_KEY"] = getpass.getpass("Enter your Google AI API key: ")
 
 
 @dataclass
 class LLMConfig:
-    """Configuration for LLM agent."""
+    """
+    Configuration for LLM agent.
 
+    API keys must be set via environment variables:
+    - Google: GOOGLE_API_KEY
+    - OpenAI: OPENAI_API_KEY
+    - Anthropic: ANTHROPIC_API_KEY
+
+    All LangChain models automatically read from these environment variables.
+    """
+
+    provider: str = "google"  # google, openai, anthropic
     model_name: str = "gemini-2.5-flash"
-    api_key: SecretStr = SecretStr(os.environ["GOOGLE_API_KEY"])
     temperature: float = 0.1
     max_tokens: int = 2000
 

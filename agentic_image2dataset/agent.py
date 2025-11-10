@@ -11,7 +11,7 @@ from langchain.agents import AgentExecutor, create_openai_functions_agent
 from langchain.memory import ConversationBufferWindowMemory
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.tools import BaseTool
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.language_models import BaseChatModel
 from pydantic import BaseModel, Field
 
 from .config import LLMConfig
@@ -22,6 +22,83 @@ from .utils import (
     get_optimal_view_count,
     suggest_processing_order,
 )
+
+
+def create_llm(config: LLMConfig) -> BaseChatModel:
+    """
+    Factory function to create the appropriate LLM based on provider.
+
+    All LangChain models automatically read API keys from environment variables:
+    - Google: GOOGLE_API_KEY
+    - OpenAI: OPENAI_API_KEY
+    - Anthropic: ANTHROPIC_API_KEY
+
+    Users must set these environment variables before running the code.
+
+    Args:
+        config: LLM configuration containing provider, model_name, and other settings
+
+    Returns:
+        BaseChatModel instance for the specified provider
+
+    Raises:
+        ValueError: If provider is not supported or required dependencies are missing
+    """
+    provider = config.provider
+
+    if provider == "google":
+        try:
+            from langchain_google_genai import ChatGoogleGenerativeAI
+        except ImportError:
+            raise ImportError(
+                "langchain-google-genai is required for Google provider. "
+                "Install it with: pip install langchain-google-genai"
+            )
+
+        # ChatGoogleGenerativeAI reads GOOGLE_API_KEY from environment automatically
+        return ChatGoogleGenerativeAI(
+            model=config.model_name,
+            temperature=config.temperature,
+            max_output_tokens=config.max_tokens,
+        )
+
+    elif provider == "openai":
+        try:
+            from langchain_openai import ChatOpenAI
+        except ImportError:
+            raise ImportError(
+                "langchain-openai is required for OpenAI provider. "
+                "Install it with: pip install langchain-openai"
+            )
+
+        # ChatOpenAI reads OPENAI_API_KEY from environment automatically
+        return ChatOpenAI(  # type: ignore
+            model=config.model_name,
+            temperature=config.temperature,
+            max_tokens=config.max_tokens,
+        )
+
+    elif provider == "anthropic":
+        try:
+            from langchain_anthropic import ChatAnthropic
+        except ImportError:
+            raise ImportError(
+                "langchain-anthropic is required for Anthropic provider. "
+                "Install it with: pip install langchain-anthropic"
+            )
+
+        # ChatAnthropic reads ANTHROPIC_API_KEY from environment automatically
+        return ChatAnthropic(  # type: ignore
+            model=config.model_name,
+            temperature=config.temperature,
+            max_tokens=config.max_tokens,
+        )
+
+    else:
+        raise ValueError(
+            f"Unsupported provider: {provider}. "
+            f"Supported providers are: google, openai, anthropic"
+        )
 
 
 @dataclass
@@ -123,13 +200,8 @@ class AgenticImageProcessor:
         self.config: LLMConfig = config
         self.model_registry: ModelRegistry = model_registry
 
-        # Initialize LLM
-        self.llm: ChatGoogleGenerativeAI = ChatGoogleGenerativeAI(
-            model=config.model_name,
-            temperature=config.temperature,
-            max_output_tokens=config.max_tokens,
-            api_key=config.api_key,
-        )
+        # Initialize LLM using factory function
+        self.llm: BaseChatModel = create_llm(config)
 
         # Create tools
         self.tools: list[BaseTool] = []

@@ -4,11 +4,8 @@ Command-line interface for the agentic pipeline.
 
 import argparse
 import json
-import os
 import sys
 from pathlib import Path
-
-from pydantic import SecretStr
 
 from .config import LLMConfig, ModelConfig, PipelineConfig
 from .pipeline import AgenticPipeline
@@ -21,12 +18,23 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Basic usage
+  # Basic usage (requires GOOGLE_API_KEY environment variable)
+  export GOOGLE_API_KEY=your-api-key
   python -m agentic_image2dataset.cli --input photo.jpg --output dataset/
 
   # With custom settings
   python -m agentic_image2dataset.cli --input photo.jpg --output dataset/ \\
-    --num-views 36 --device cuda --llm-model gemini-2.5-flash
+    --num-views 36 --device cuda --llm-provider google --llm-model gemini-2.5-flash
+
+  # Using OpenAI (requires OPENAI_API_KEY environment variable)
+  export OPENAI_API_KEY=your-api-key
+  python -m agentic_image2dataset.cli --input photo.jpg --output dataset/ \\
+    --llm-provider openai --llm-model gpt-4-turbo
+
+  # Using Anthropic (requires ANTHROPIC_API_KEY environment variable)
+  export ANTHROPIC_API_KEY=your-api-key
+  python -m agentic_image2dataset.cli --input photo.jpg --output dataset/ \\
+    --llm-provider anthropic --llm-model claude-3-5-sonnet-20241022
 
   # Skip COLMAP preprocessing
   python -m agentic_image2dataset.cli --input photo.jpg --output dataset/ \\
@@ -45,14 +53,16 @@ Examples:
 
     # LLM configuration
     parser.add_argument(
-        "--llm-model",
-        default="gemini-2.5-flash",
-        help="LLM model to use for planning (e.g., gemini-2.5-flash, gemini-pro, gpt-4, claude-3-opus)",
+        "--llm-provider",
+        default="google",
+        choices=["google", "openai", "anthropic"],
+        help="LLM provider to use (google, openai, or anthropic)",
     )
 
     parser.add_argument(
-        "--llm-api-key",
-        help="API key for LLM (can also be set via GOOGLE_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY environment variable)",
+        "--llm-model",
+        default="gemini-2.5-flash",
+        help="LLM model to use for planning (e.g., gemini-2.5-flash, gemini-pro, gpt-4, gpt-4-turbo, claude-3-opus, claude-3-5-sonnet)",
     )
 
     parser.add_argument(
@@ -132,6 +142,7 @@ Examples:
         print(f"Processing image: {args.input}")
         print(f"Output directory: {args.output}")
         print(f"Device: {config.model.device}")
+        print(f"LLM Provider: {config.llm.provider}")
         print(f"LLM Model: {config.llm.model_name}")
 
         result = pipeline.process(
@@ -167,20 +178,12 @@ Examples:
 
 def _create_config(args) -> PipelineConfig:
     """Create configuration from command line arguments."""
-    # Get API key from args or environment
-    api_key_str = args.llm_api_key or _get_api_key_from_env(args.llm_model)
-
-    # Create LLM config - if api_key is provided, use it; otherwise use default from environment
-    if api_key_str:
-        api_key = SecretStr(api_key_str)
-        llm_config = LLMConfig(
-            model_name=args.llm_model, api_key=api_key, temperature=args.llm_temperature
-        )
-    else:
-        # Use default from environment (handled by LLMConfig default)
-        llm_config = LLMConfig(
-            model_name=args.llm_model, temperature=args.llm_temperature
-        )
+    # Create LLM config (API keys must be set via environment variables)
+    llm_config = LLMConfig(
+        provider=args.llm_provider,
+        model_name=args.llm_model,
+        temperature=args.llm_temperature,
+    )
 
     model_config = ModelConfig(
         device=args.device,
@@ -197,19 +200,6 @@ def _create_config(args) -> PipelineConfig:
         skip_colmap=args.skip_colmap,
         verbose=args.verbose,
     )
-
-
-def _get_api_key_from_env(model_name: str) -> str:
-    """Get API key from environment variables."""
-    model_lower = model_name.lower()
-    if "gemini" in model_lower:
-        return os.getenv("GOOGLE_API_KEY", "")
-    elif "gpt" in model_lower:
-        return os.getenv("OPENAI_API_KEY", "")
-    elif "claude" in model_lower:
-        return os.getenv("ANTHROPIC_API_KEY", "")
-    # Default to Google API key for backward compatibility
-    return os.getenv("GOOGLE_API_KEY", "")
 
 
 def _list_models():
