@@ -16,7 +16,6 @@ paper/*.fls
 __pycache__/
 
 .vscode/
-uv.lock
 weights/
 
 # Project data and artifacts (keep structure, ignore contents)
@@ -45,3 +44,4 @@ results/**
 .pytest_cache/
 .env
 .venv/
+*.png
