@@ -11,11 +11,7 @@ or load the .env file in the root directory.
 
 from pathlib import Path
 
-# Set up API key GOOGLE_API_KEY environment variable from .env file
 from dotenv import load_dotenv
-
-load_dotenv()
-
 
 from agentic_image2dataset import (
     AgenticPipeline,
@@ -23,6 +19,9 @@ from agentic_image2dataset import (
     ModelConfig,
     PipelineConfig,
 )
+
+# Set up API key GOOGLE_API_KEY environment variable from .env file
+load_dotenv()
 
 
 def main():
