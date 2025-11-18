@@ -6,7 +6,7 @@
 	url = https://github.com/Stability-AI/stable-virtual-camera
 [submodule "DiffBIR"]
 	path = DiffBIR
-	url = https://github.com/XPixelGroup/DiffBIR.git
+	url = https://github.com/Your-Cheese/DiffBIR/tree/diffusion-3dgs-project
 [submodule "AdcSR"]
 	path = AdcSR
 	url = https://github.com/Guaishou74851/AdcSR.git
