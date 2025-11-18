@@ -19,8 +19,6 @@ from .models.base import ModelRegistry
 from .utils import (
     analyze_image_quality,
     detect_image_issues,
-    get_optimal_view_count,
-    suggest_processing_order,
 )
 
 
@@ -137,8 +135,6 @@ class ImageAnalysisTool(BaseTool):
         result = {
             "analysis": analysis,
             "issues": issues,
-            "suggested_processing_order": suggest_processing_order(analysis),
-            "optimal_view_count": get_optimal_view_count(analysis),
         }
 
         return json.dumps(result, indent=2)
