@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
 """
 Example usage of the agentic image processing pipeline.
+
+Set the GOOGLE_API_KEY environment variable to your Google API key.
+```bash
+export GOOGLE_API_KEY=your-api-key
+```
+or load the .env file in the root directory.
 """
 
-import os
 from pathlib import Path
 
-# Set up API key (replace with your actual key)
-os.environ["GOOGLE_API_KEY"] = "your-api-key"
+# Set up API key GOOGLE_API_KEY environment variable from .env file
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 from agentic_image2dataset import (

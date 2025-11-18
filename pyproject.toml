@@ -6,7 +6,6 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "langchain~=0.3.0",
-    "langchain-google-genai~=2.1.0",
     "opencv-python",
     "pillow",
     "numpy",
@@ -39,4 +38,21 @@ dependencies = [
     "tokenizers>=0.15.1",
     "sentencepiece>=0.1.99",
     "fairscale>=0.4.4",
+    "python-dotenv>=1.2.1",
+]
+
+[project.optional-dependencies]
+google = [
+    "langchain-google-genai~=2.1.0",
+]
+openai = [
+    "langchain-openai~=2.1.0",
+]
+anthropic = [
+    "langchain-anthropic~=2.1.0",
+]
+all = [
+    "langchain-google-genai~=2.1.0",
+    "langchain-openai~=2.1.0",
+    "langchain-anthropic~=2.1.0",
 ]
