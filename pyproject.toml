@@ -39,6 +39,7 @@ dependencies = [
     "sentencepiece>=0.1.99",
     "fairscale>=0.4.4",
     "python-dotenv>=1.2.1",
+    "peft>=0.18.0",
 ]
 
 [project.optional-dependencies]
