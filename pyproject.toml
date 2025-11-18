@@ -46,13 +46,13 @@ google = [
     "langchain-google-genai~=2.1.0",
 ]
 openai = [
-    "langchain-openai~=2.1.0",
+    "langchain-openai~=0.3.0",
 ]
 anthropic = [
-    "langchain-anthropic~=2.1.0",
+    "langchain-anthropic~=0.3.0",
 ]
 all = [
     "langchain-google-genai~=2.1.0",
-    "langchain-openai~=2.1.0",
-    "langchain-anthropic~=2.1.0",
+    "langchain-openai~=0.3.0",
+    "langchain-anthropic~=0.3.0",
 ]
