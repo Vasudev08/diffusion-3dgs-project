@@ -3,18 +3,22 @@ Stable Virtual Camera model wrapper for generating novel views.
 """
 
 import glob
-import os.path as osp
+import os
 import shutil
+import sys
 from pathlib import Path
 
 import numpy as np
 import torch
-from PIL import Image
-from seva.eval import create_transforms_simple, infer_prior_stats, run_one_scene
-from seva.geometry import (
-    get_default_intrinsics,
-    get_preset_pose_fov,
-)
+
+_project_root = Path(__file__).parent.parent.parent
+_stable_virtual_camera_path = _project_root / "stable-virtual-camera"
+if str(_stable_virtual_camera_path) not in sys.path:
+    sys.path.insert(0, str(_stable_virtual_camera_path))
+
+
+from demo import parse_task
+from seva.eval import create_transforms_simple, run_one_scene
 from seva.model import SGMWrapper
 from seva.modules.autoencoder import AutoEncoder
 from seva.modules.conditioner import CLIPConditioner
@@ -22,6 +26,134 @@ from seva.sampling import DiscreteDenoiser
 from seva.utils import load_model
 
 from .base import BaseProcessingModel
+
+
+def process_scene(
+    task: str,
+    scene_path: str,
+    output_dir: str,
+    model: SGMWrapper,
+    ae: AutoEncoder,
+    conditioner: CLIPConditioner,
+    denoiser: DiscreteDenoiser,
+    version_dict: dict,
+    num_inputs: int | None = None,
+    use_traj_prior: bool = False,
+    seed: int = 23,
+    return_paths: bool = False,
+):
+    """
+    Core function to process a single scene for any task type.
+
+    This function extracts the common logic from main() and can be reused
+    by both the CLI demo and programmatic interfaces.
+
+    Args:
+        task: Task type ("img2trajvid_s-prob", "img2img", "img2vid", "img2trajvid")
+        scene_path: Path to input image or dataset directory
+        output_dir: Directory to save outputs
+        model: SGMWrapper model instance
+        ae: AutoEncoder instance
+        conditioner: CLIPConditioner instance
+        denoiser: DiscreteDenoiser instance
+        version_dict: Version configuration dict (will be modified in-place)
+        num_inputs: Number of input views (None for auto-detect)
+        use_traj_prior: Whether to use trajectory prior
+        seed: Random seed
+        return_paths: If True, return list of output image paths
+
+    Returns:
+        List of Path objects if return_paths=True, else None
+    """
+    from pathlib import Path
+
+    # Parse task to get all setup
+    (
+        all_imgs_path,
+        num_inputs,
+        num_targets,
+        input_indices,
+        anchor_indices,
+        c2ws,
+        Ks,
+        anchor_c2ws,
+        anchor_Ks,
+    ) = parse_task(
+        task,
+        scene_path,
+        num_inputs,
+        version_dict["T"],
+        version_dict,
+    )
+    assert num_inputs is not None
+
+    # Create image conditioning
+    image_cond = {
+        "img": all_imgs_path,
+        "input_indices": input_indices,
+        "prior_indices": anchor_indices,
+    }
+
+    # Create camera conditioning
+    camera_cond = {
+        "c2w": c2ws.clone(),
+        "K": Ks.clone(),
+        "input_indices": list(range(num_inputs + num_targets)),
+    }
+
+    # Run the scene generation
+    video_path_generator = run_one_scene(
+        task,
+        version_dict,  # H, W may be updated in-place
+        model=model,
+        ae=ae,
+        conditioner=conditioner,
+        denoiser=denoiser,
+        image_cond=image_cond,
+        camera_cond=camera_cond,
+        save_path=output_dir,
+        use_traj_prior=use_traj_prior,
+        traj_prior_Ks=anchor_Ks,
+        traj_prior_c2ws=anchor_c2ws,
+        seed=seed,
+    )
+
+    # Consume generator
+    for _ in video_path_generator:
+        pass
+
+    # Post-process: convert camera format
+    c2ws = c2ws @ torch.tensor(np.diag([1, -1, -1, 1])).float()
+
+    # Collect image paths
+    img_paths = sorted(glob.glob(os.path.join(output_dir, "samples-rgb", "*.png")))
+    if len(img_paths) != len(c2ws):
+        input_img_paths = sorted(glob.glob(os.path.join(output_dir, "input", "*.png")))
+        assert len(img_paths) == num_targets
+        assert len(input_img_paths) == num_inputs
+        assert c2ws.shape[0] == num_inputs + num_targets
+        target_indices = [i for i in range(c2ws.shape[0]) if i not in input_indices]
+        img_paths = [
+            input_img_paths[input_indices.index(i)]
+            if i in input_indices
+            else img_paths[target_indices.index(i)]
+            for i in range(c2ws.shape[0])
+        ]
+
+    # Create transforms.json
+    create_transforms_simple(
+        save_path=output_dir,
+        img_paths=img_paths,
+        img_whs=np.array([version_dict["W"], version_dict["H"]])[None].repeat(
+            num_inputs + num_targets, 0
+        ),
+        c2ws=c2ws,
+        Ks=Ks,
+    )
+
+    if return_paths:
+        return [Path(p) for p in img_paths]
+    return None
 
 
 class StableVirtualCameraModel(BaseProcessingModel):
@@ -34,11 +166,6 @@ class StableVirtualCameraModel(BaseProcessingModel):
         self._ae = None
         self._conditioner = None
         self._denoiser = None
-
-        self._run_one_scene = run_one_scene
-        self._get_preset_pose_fov = get_preset_pose_fov
-        self._get_default_intrinsics = get_default_intrinsics
-        self._infer_prior_stats = infer_prior_stats
 
     @property
     def model(self):
@@ -73,33 +200,45 @@ class StableVirtualCameraModel(BaseProcessingModel):
 
     def process(
         self,
-        image_path: str | Path,
+        image_path: str
+        | Path,  # Keep image_path for backward compatibility with base class
         output_dir: str | Path,
+        task: str = "img2trajvid_s-prob",
+        # Parameters for img2trajvid_s-prob (single image with preset trajectory)
         num_views: int = 24,
         trajectory: str = "orbit",
         # Advanced parameters with sensible defaults
         T: int = 21,
         H: int = 576,
         W: int = 576,
-        guider_types: list[int] | None = None,
-        cfg: list[float] | None = None,
+        guider_types: list[int] | None = [1, 2],
+        cfg: list[float] | None = [4.0, 2.0],
         chunk_strategy: str = "interp",
         camera_scale: float = 2.0,
         num_steps: int = 50,
         cfg_min: float = 1.2,
         video_save_fps: float = 30.0,
         use_traj_prior: bool = True,
-        replace_or_include_input: bool = True,
+        num_inputs: int | None = None,
         seed: int = 23,
+        # Additional options that can be passed through
+        **extra_options,
     ) -> list[Path]:
         """
-        Generate novel views from the input image using img2trajvid_s-prob pipeline.
+        Generate novel views using Stable Virtual Camera.
+
+        Supports all task types:
+        - "img2trajvid_s-prob": Single image with preset trajectory (default)
+        - "img2img": Dataset with train/test splits, generate novel views
+        - "img2vid": Dataset, generate video frames
+        - "img2trajvid": Dataset with train/test splits, generate trajectory video
 
         Args:
-            image_path: Path to the input image
+            image_path: Path to input image (for img2trajvid_s-prob) or dataset directory (for other tasks)
             output_dir: Directory to save generated views
-            num_views: Number of views to generate (default: 24)
-            trajectory: Camera trajectory type - "orbit", "pan-left", "pan-right", etc. (default: "orbit")
+            task: Task type - "img2trajvid_s-prob", "img2img", "img2vid", or "img2trajvid" (default: "img2trajvid_s-prob")
+            num_views: Number of views to generate for img2trajvid_s-prob (default: 24)
+            trajectory: Camera trajectory type for img2trajvid_s-prob - "orbit", "spiral", etc. (default: "orbit")
             T: Temporal dimension for the model (default: 21)
             H: Image height (default: 576)
             W: Image width (default: 576)
@@ -111,156 +250,71 @@ class StableVirtualCameraModel(BaseProcessingModel):
             cfg_min: Minimum CFG value (default: 1.2)
             video_save_fps: FPS for saved video (default: 30.0)
             use_traj_prior: Whether to use trajectory prior (default: True)
-            replace_or_include_input: Whether to include input image in output (default: True)
+            num_inputs: Number of input views (None for auto-detect, only for dataset tasks)
             seed: Random seed (default: 23)
+            **extra_options: Additional options to pass to version_dict["options"]
+
+        Returns:
+            List of Path objects for generated images
         """
-        image_path = Path(image_path)
+        # Support both image_path (base class) and scene_path (new name) for backward compatibility
+        scene_path = Path(image_path)
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Get image dimensions
-        with Image.open(image_path) as img:
-            img_W, img_H = img.size
-            aspect_ratio = img_W / img_H
-
-        # Set defaults for optional list parameters
-        if guider_types is None:
-            guider_types = [1, 2]
-        if cfg is None:
-            cfg = [4.0, 2.0]
-
         # Build version_dict with explicit parameters
+        options = {
+            "chunk_strategy": chunk_strategy,
+            "video_save_fps": video_save_fps,
+            "beta_linear_start": 5e-6,
+            "log_snr_shift": 2.4,
+            "guider_types": guider_types,
+            "cfg": cfg,
+            "camera_scale": camera_scale,
+            "num_steps": num_steps,
+            "cfg_min": cfg_min,
+            "encoding_t": 1,
+            "decoding_t": 1,
+        }
+
+        # Add task-specific options
+        if task == "img2trajvid_s-prob":
+            options["num_targets"] = num_views
+            options["traj_prior"] = trajectory
+            options["use_traj_prior"] = use_traj_prior
+
+        # Merge in any extra options
+        options.update(extra_options)
+
         version_dict = {
             "H": H,
             "W": W,
             "T": T,
             "C": 4,
             "f": 8,
-            "options": {
-                "chunk_strategy": chunk_strategy,
-                "video_save_fps": video_save_fps,
-                "beta_linear_start": 5e-6,
-                "log_snr_shift": 2.4,
-                "guider_types": guider_types,
-                "cfg": cfg,
-                "camera_scale": camera_scale,
-                "num_steps": num_steps,
-                "cfg_min": cfg_min,
-                "encoding_t": 1,
-                "decoding_t": 1,
-                "num_targets": num_views,
-                "traj_prior": trajectory,
-                "use_traj_prior": use_traj_prior,
-                "replace_or_include_input": replace_or_include_input,
-            },
+            "options": options,
         }
 
-        num_inputs = 1  # img2trajvid_s-prob only supports single-view
-        num_targets = version_dict["options"]["num_targets"]
+        # Use the shared process_scene function
+        if process_scene is None:
+            raise ImportError(
+                "Could not import process_scene from demo.py. "
+                "Make sure stable-virtual-camera is in the project path."
+            )
 
-        # Infer anchor stats (modifies T in-place)
-        num_anchors = self._infer_prior_stats(
-            version_dict["T"],
-            num_inputs,
-            num_total_frames=num_targets,
-            version_dict=version_dict,
-        )
-
-        # Set up input and anchor indices
-        input_indices = [0]
-        anchor_indices = np.linspace(1, num_targets, num_anchors).tolist()
-
-        # Generate camera poses and intrinsics
-        c2ws, fovs = self._get_preset_pose_fov(
-            option=version_dict["options"]["traj_prior"],
-            num_frames=num_targets + 1,
-            start_w2c=torch.eye(4),
-            look_at=torch.Tensor([0, 0, 10]),
-        )
-
-        Ks = self._get_default_intrinsics(
-            fovs, aspect_ratio=aspect_ratio
-        )  # unnormalized
-        Ks[:, :2] *= (
-            torch.tensor([img_W, img_H]).reshape(1, -1, 1).repeat(Ks.shape[0], 1, 1)
-        )  # normalized
-        Ks = Ks.numpy()
-
-        # Get anchor poses and intrinsics
-        anchor_c2ws = c2ws[[round(ind) for ind in anchor_indices]]
-        anchor_Ks = Ks[[round(ind) for ind in anchor_indices]]
-
-        # Prepare image conditioning
-        all_imgs_path = [str(image_path)] + [None] * num_targets
-        image_cond = {
-            "img": all_imgs_path,
-            "input_indices": input_indices,
-            "prior_indices": anchor_indices,
-        }
-
-        # Prepare camera conditioning (store c2ws for later use in postprocessing)
-        c2ws_tensor = torch.tensor(c2ws[:, :3]).float()
-        Ks_tensor = torch.tensor(Ks).float()
-        camera_cond = {
-            "c2w": c2ws_tensor,
-            "K": Ks_tensor,
-            "input_indices": list(range(num_inputs + num_targets)),
-        }
-
-        # Run the img2trajvid_s-prob pipeline
-        video_path_generator = self._run_one_scene(
-            task="img2trajvid_s-prob",
-            version_dict=version_dict,
+        img_paths = process_scene(
+            task=task,
+            scene_path=str(scene_path),
+            output_dir=str(output_dir),
             model=self.model,
             ae=self.ae,
             conditioner=self.conditioner,
             denoiser=self.denoiser,
-            image_cond=image_cond,
-            camera_cond=camera_cond,
-            save_path=str(output_dir),
-            use_traj_prior=version_dict["options"]["use_traj_prior"],
-            traj_prior_Ks=torch.tensor(anchor_Ks).float()
-            if anchor_Ks is not None
-            else None,
-            traj_prior_c2ws=torch.tensor(anchor_c2ws[:, :3]).float()
-            if anchor_c2ws is not None
-            else None,
+            version_dict=version_dict,
+            num_inputs=num_inputs if task != "img2trajvid_s-prob" else 1,
+            use_traj_prior=use_traj_prior,
             seed=seed,
-        )
-
-        # Consume the generator (it yields video paths during generation)
-        for _ in video_path_generator:
-            pass
-
-        # Convert from OpenCV to OpenGL camera format (same as demo.py)
-        c2ws = c2ws_tensor @ torch.tensor(np.diag([1, -1, -1, 1])).float()
-
-        # Collect image paths (same logic as demo.py)
-        img_paths = sorted(glob.glob(osp.join(str(output_dir), "samples-rgb", "*.png")))
-        if len(img_paths) != len(c2ws):
-            input_img_paths = sorted(
-                glob.glob(osp.join(str(output_dir), "input", "*.png"))
-            )
-            assert len(img_paths) == num_targets
-            assert len(input_img_paths) == num_inputs
-            assert c2ws.shape[0] == num_inputs + num_targets
-            target_indices = [i for i in range(c2ws.shape[0]) if i not in input_indices]
-            img_paths = [
-                input_img_paths[input_indices.index(i)]
-                if i in input_indices
-                else img_paths[target_indices.index(i)]
-                for i in range(c2ws.shape[0])
-            ]
-
-        # Create transforms.json (same as demo.py)
-        create_transforms_simple(
-            save_path=str(output_dir),
-            img_paths=img_paths,
-            img_whs=np.array([version_dict["W"], version_dict["H"]])[None].repeat(
-                num_inputs + num_targets, 0
-            ),
-            c2ws=c2ws,
-            Ks=Ks_tensor,
+            return_paths=True,
         )
 
         # Copy all images to the root of output_dir for the pipeline to find them easily
@@ -275,4 +329,4 @@ class StableVirtualCameraModel(BaseProcessingModel):
 
     def get_description(self) -> str:
         """Get model description."""
-        return "Stable Virtual Camera model for generating novel views from a single input image"
+        return "Stable Virtual Camera model for generating novel views. Supports all task types: img2trajvid_s-prob, img2img, img2vid, img2trajvid"
