@@ -7,11 +7,15 @@ import json
 import sys
 from pathlib import Path
 
-from .config import LLMConfig, ModelConfig, PipelineConfig
-from .pipeline import AgenticPipeline
+from dotenv import load_dotenv
+
+from agentic_image2dataset.config import LLMConfig, ModelConfig, PipelineConfig
+from agentic_image2dataset.pipeline import AgenticPipeline
 
 
 def main():
+    load_dotenv()
+
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
         description="Agentic Image to 3DGS Dataset Pipeline",
@@ -250,4 +254,5 @@ def _show_model_info(model_name: str):
 
 
 if __name__ == "__main__":
+    # Set up API keys from environment variables in .env file
     main()

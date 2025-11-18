@@ -14,9 +14,9 @@ from langchain.tools import BaseTool
 from langchain_core.language_models import BaseChatModel
 from pydantic import BaseModel, Field
 
-from .config import LLMConfig
-from .models.base import ModelRegistry
-from .utils import (
+from agentic_image2dataset.config import LLMConfig
+from agentic_image2dataset.models.base import ModelRegistry
+from agentic_image2dataset.utils import (
     analyze_image_quality,
     detect_image_issues,
 )
