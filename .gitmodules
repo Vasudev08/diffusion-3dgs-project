@@ -10,3 +10,6 @@
 [submodule "AdcSR"]
 	path = AdcSR
 	url = https://github.com/Guaishou74851/AdcSR.git
+[submodule "nerfstudio"]
+	path = nerfstudio
+	url = https://github.com/nerfstudio-project/nerfstudio
