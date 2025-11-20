@@ -12,7 +12,11 @@ from agentic_image2dataset.config import PipelineConfig
 from agentic_image2dataset.models.base import ModelRegistry
 from agentic_image2dataset.models.super_resolution import AdcSRModel, DiffBIRModel
 from agentic_image2dataset.models.view_generator import StableVirtualCameraModel
-from agentic_image2dataset.utils import analyze_image_quality, detect_image_issues
+from agentic_image2dataset.utils import (
+    analyze_image_quality,
+    detect_image_issues,
+    fix_transforms,
+)
 
 
 class AgenticPipeline:
@@ -231,8 +235,17 @@ class AgenticPipeline:
         transforms_json = images_dir / "transforms.json"
         if transforms_json.exists():
             shutil.copy2(transforms_json, output_dir / "transforms.json")
+
+            # Fix the transforms.json in the output directory
+            try:
+                fix_transforms(output_dir / "transforms.json")
+            except Exception as e:
+                print(f"Warning: Failed to fix transforms.json: {e}")
+
             if self.config.verbose:
-                print(f"Copied transforms.json to {output_dir / 'transforms.json'}")
+                print(
+                    f"Copied and fixed transforms.json to {output_dir / 'transforms.json'}"
+                )
 
         # Copy COLMAP results if available
         if colmap_dir and colmap_dir.exists():

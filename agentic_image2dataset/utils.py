@@ -188,3 +188,106 @@ def get_optimal_view_count(analysis: Dict[str, Any]) -> int:
         return max(base_views - 8, 12)  # Fewer views for simple scenes
 
     return base_views
+
+
+def fix_transforms(transforms_path: Path) -> None:
+    """
+    Fix transforms.json by resizing and scaling intrinsics based on actual image dimensions.
+
+    Args:
+        transforms_path: Path to the transforms.json file
+    """
+    import json
+    import cv2
+
+    print(f"Processing {transforms_path}...")
+
+    with open(transforms_path, "r") as f:
+        data = json.load(f)
+
+    if not data.get("frames"):
+        print("No frames found in transforms.json")
+        return
+
+    transforms_dir = transforms_path.parent
+    new_frames = []
+    modified_count = 0
+
+    for frame in data["frames"]:
+        new_frame = frame.copy()
+
+        # Resolve image path
+        file_path = frame.get("file_path")
+        if not file_path:
+            print("Warning: Frame missing file_path, skipping.")
+            new_frames.append(new_frame)
+            continue
+
+        # Handle relative paths
+        image_path = transforms_dir / file_path
+        if not image_path.exists():
+            # Try checking if file_path is absolute or relative to cwd (fallback)
+            image_path = Path(file_path)
+
+        if not image_path.exists():
+            print(
+                f"Warning: Image not found at {image_path}, skipping dimension update."
+            )
+            new_frames.append(new_frame)
+            continue
+
+        # Read image to get actual dimensions
+        # We read only the header if possible, but cv2.imread loads the whole image.
+        # For efficiency with many large images, one might use PIL, but we stick to cv2 as per import.
+        img = cv2.imread(str(image_path))
+        if img is None:
+            print(f"Warning: Could not read image {image_path}, skipping.")
+            new_frames.append(new_frame)
+            continue
+
+        actual_h, actual_w = img.shape[:2]
+
+        # Infer original dimensions from current intrinsics
+        # Assuming principal point is at center, original W = cx * 2, H = cy * 2
+        # This logic assumes the current 'cx' and 'cy' in the json are from some "original" resolution
+        # that might not match the actual image if it was resized but intrinsics weren't updated,
+        # OR if the intrinsics are correct for the "original" sensor but we have a resized image.
+        # The goal here is to make intrinsics match the ACTUAL image dimensions.
+
+        current_cx = frame["cx"]
+        current_cy = frame["cy"]
+
+        # If we assume the current intrinsics correspond to a theoretical image size of (2*cx, 2*cy)
+        orig_w = current_cx * 2
+        orig_h = current_cy * 2
+
+        if orig_w == 0 or orig_h == 0:
+            print(f"Warning: Invalid inferred dimensions for {file_path}, skipping.")
+            new_frames.append(new_frame)
+            continue
+
+        scale_x = actual_w / orig_w
+        scale_y = actual_h / orig_h
+
+        # Update dimensions
+        new_frame["w"] = actual_w
+        new_frame["h"] = actual_h
+
+        # Scale intrinsics
+        new_frame["fl_x"] = frame["fl_x"] * scale_x
+        new_frame["fl_y"] = frame["fl_y"] * scale_y
+        new_frame["cx"] = frame["cx"] * scale_x
+        new_frame["cy"] = frame["cy"] * scale_y
+
+        new_frames.append(new_frame)
+        modified_count += 1
+
+    data["frames"] = new_frames
+
+    # Overwrite the file
+    with open(transforms_path, "w") as f:
+        json.dump(data, f, indent=4)
+
+    print(
+        f"Saved fixed transforms to {transforms_path} (Updated {modified_count} frames)"
+    )
