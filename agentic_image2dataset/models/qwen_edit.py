@@ -22,6 +22,9 @@ class QwenImageEditModel(BaseProcessingModel):
         if self._pipeline is None:
             from diffusers import QwenImageEditPipeline
 
+            # import sdnq to register it into diffusers and transformers
+            from sdnq import SDNQConfig  # noqa: F401
+
             print("Loading Quantized Qwen Image Edit pipeline...")
             self._pipeline = QwenImageEditPipeline.from_pretrained(
                 "Disty0/Qwen-Image-Edit-SDNQ-uint4-svd-r32",
