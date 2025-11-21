@@ -45,3 +45,7 @@ results/**
 .env
 .venv/
 *.png
+
+.cursor
+.gradio
+work_dirs
