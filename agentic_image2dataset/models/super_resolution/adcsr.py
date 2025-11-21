@@ -127,13 +127,60 @@ class AdcSRModel(BaseProcessingModel):
         scale: int | None = None,
         **kwargs,
     ) -> list[Path]:
-        """Apply super-resolution to the image using AdcSR."""
+        """Apply super-resolution to the image(s) using AdcSR.
+
+        Args:
+            image_path: Path to a single image file or a directory containing multiple images
+            output_dir: Directory to save processed images
+            scale: Scale factor for super-resolution (default: 4)
+            **kwargs: Additional parameters
+
+        Returns:
+            List of paths to generated super-resolution images
+        """
         image_path = Path(image_path)
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
         scale = scale or self.scale
 
+        # Check if input is a directory or a single file
+        if image_path.is_dir():
+            # Process all images in the directory
+            image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff"}
+            image_files = [
+                f
+                for f in image_path.iterdir()
+                if f.is_file() and f.suffix.lower() in image_extensions
+            ]
+
+            if not image_files:
+                raise ValueError(f"No image files found in directory: {image_path}")
+
+            # Process each image
+            all_results = []
+            for img_file in image_files:
+                result = self._process_single_image(img_file, output_dir, scale)
+                all_results.append(result)
+
+            return all_results
+        else:
+            # Process single image
+            return [self._process_single_image(image_path, output_dir, scale)]
+
+    def _process_single_image(
+        self, image_path: Path, output_dir: Path, scale: int
+    ) -> Path:
+        """Process a single image with AdcSR.
+
+        Args:
+            image_path: Path to the input image
+            output_dir: Directory to save the processed image
+            scale: Scale factor for super-resolution
+
+        Returns:
+            Path to the generated super-resolution image
+        """
         # Note: AdcSR is trained for 4x upscaling, so we'll use that
         # If a different scale is requested, we'll need to handle it differently
         if scale != 4:
@@ -198,8 +245,13 @@ class AdcSRModel(BaseProcessingModel):
         final_output_path = output_dir / f"sr_adcsr_{image_path.stem}.png"
         sr_pil.save(final_output_path)
 
-        return [final_output_path]
+        return final_output_path
 
     def get_description(self) -> str:
         """Get model description."""
-        return f"AdcSR super-resolution model (epoch: {self.epoch}, scale factor: {self.scale}x)"
+        return (
+            f"AdcSR (Adversarial Diffusion Compression) super-resolution model for upscaling images. "
+            f"Epoch: {self.epoch}, default scale factor: {self.scale}x. "
+            f"Optimized for 4x upscaling. Can process single images or directories of images. "
+            f"Key parameters: scale (can override default, but model is trained for 4x)."
+        )

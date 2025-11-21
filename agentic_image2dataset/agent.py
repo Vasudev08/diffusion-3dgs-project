@@ -147,13 +147,17 @@ class ModelExecutionToolArgs(BaseModel):
         default="{}",
         description='Model parameters in JSON format. Must be a valid JSON string. Example: \'{"scale": 4, "batch_size": 1}\'',
     )
+    input_path: str | None = Field(
+        default=None,
+        description="Optional: Override the default input path. Use this to specify a different input image or directory (e.g., the output directory from a previous model). If not provided, uses the original input image.",
+    )
 
 
 class ModelExecutionTool(BaseTool):
     """Tool for executing processing models."""
 
     name: str = "execute_model"
-    description: str = "Execute a processing model on the input image. The 'parameters' argument must be provided as a JSON string."
+    description: str = "Execute a processing model on an image or directory. By default uses the original input image, but you can override this with the 'input_path' parameter to chain models (e.g., pass view generation output directory to super-resolution). The 'parameters' argument must be provided as a JSON string."
     args_schema = ModelExecutionToolArgs
     model_registry: ModelRegistry
     input_path: Path
@@ -174,7 +178,9 @@ class ModelExecutionTool(BaseTool):
         )
 
     @override
-    def _run(self, model_name: str, parameters: str = "{}") -> str:
+    def _run(
+        self, model_name: str, parameters: str = "{}", input_path: str | None = None
+    ) -> str:
         """Execute a model with given parameters."""
         model = self.model_registry.get(model_name)
         if model is None:
@@ -183,9 +189,12 @@ class ModelExecutionTool(BaseTool):
         # Parse parameters
         params: dict[str, object] = json.loads(parameters)
 
+        # Use provided input_path or fall back to default
+        actual_input_path = Path(input_path) if input_path else self.input_path
+
         # Execute the model
         try:
-            results = model.process(self.input_path, self.output_dir, **params)
+            results = model.process(actual_input_path, self.output_dir, **params)
         except Exception as e:
             return f"Failed to execute model '{model_name}': {str(e)}"
 
@@ -239,7 +248,7 @@ class AgenticImageProcessor:
                         guidance_text="Use 'adcsr' for faster processing with competitive quality",
                     ),
                 ],
-                shared_notes="Both models support 4x upscaling by default",
+                shared_notes="Both models support 4x upscaling by default. IMPORTANT: These models can process either a single image OR a directory containing multiple images. When applying super-resolution AFTER view generation, you should process the directory containing all generated views to upscale them all at once.",
             ),
             "image_editing": RoleConfiguration(
                 display_name="Image Editing Models",
