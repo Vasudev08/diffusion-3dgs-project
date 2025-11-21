@@ -5,7 +5,6 @@ AdcSR model wrapper for super-resolution.
 import copy
 import sys
 from pathlib import Path
-from typing import List, Optional, Union
 
 import numpy as np
 import torch
@@ -28,7 +27,7 @@ class AdcSRModel(BaseProcessingModel):
         device: str = "cuda",
         scale: int = 4,
         epoch: int = 200,
-        model_dir: Optional[Union[str, Path]] = None,
+        model_dir: str | Path | None = None,
         **kwargs,
     ):
         super().__init__(device, **kwargs)
@@ -36,7 +35,7 @@ class AdcSRModel(BaseProcessingModel):
         self.device: str = device
         self.epoch: int = epoch
         self.model_dir: Path = Path(model_dir) if model_dir else ADCSR_PATH / "weight"
-        self._model: Optional[torch.nn.Module] = None  # Lazy initialization
+        self._model: torch.nn.Module | None = None  # Lazy initialization
 
     @property
     def model(self) -> torch.nn.Module:
@@ -123,11 +122,11 @@ class AdcSRModel(BaseProcessingModel):
 
     def process(
         self,
-        image_path: Union[str, Path],
-        output_dir: Union[str, Path],
-        scale: Optional[int] = None,
+        image_path: str | Path,
+        output_dir: str | Path,
+        scale: int | None = None,
         **kwargs,
-    ) -> List[Path]:
+    ) -> list[Path]:
         """Apply super-resolution to the image using AdcSR."""
         image_path = Path(image_path)
         output_dir = Path(output_dir)
@@ -149,16 +148,34 @@ class AdcSRModel(BaseProcessingModel):
         if image.dtype != np.uint8:
             image = (image * 255).astype(np.uint8)
         pil_image = Image.fromarray(image).convert("RGB")
+        original_w, original_h = pil_image.size
 
         # Convert to tensor and normalize to [-1, 1]
         transform = transforms.ToTensor()
         lr_tensor = transform(pil_image).to(self.device).unsqueeze(0) * 2 - 1
 
+        # Calculate padding to multiple of 16
+        pad_w = (16 - original_w % 16) % 16
+        pad_h = (16 - original_h % 16) % 16
+
+        # Apply padding if needed
+        if pad_w > 0 or pad_h > 0:
+            lr_tensor_padded = torch.nn.functional.pad(
+                lr_tensor, (0, pad_w, 0, pad_h), mode="reflect"
+            )
+        else:
+            lr_tensor_padded = lr_tensor
+
         # Run inference
         with torch.no_grad():
-            sr_tensor = self.model(lr_tensor)
+            sr_tensor = self.model(lr_tensor_padded)
+
+            # Crop back to original size
+            if pad_w > 0 or pad_h > 0:
+                sr_tensor = sr_tensor[:, :, :original_h, :original_w]
 
             # Apply statistics matching (from AdcSR test.py)
+            # Note: We use the original (unpadded) lr_tensor for statistics matching
             sr_tensor = (
                 sr_tensor - sr_tensor.mean(dim=[2, 3], keepdim=True)
             ) / sr_tensor.std(dim=[2, 3], keepdim=True) * lr_tensor.std(

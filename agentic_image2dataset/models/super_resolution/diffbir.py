@@ -4,7 +4,6 @@ DiffBIR model wrapper for super-resolution.
 
 import sys
 from pathlib import Path
-from typing import List, Optional, Union
 
 import numpy as np
 from PIL import Image
@@ -30,7 +29,7 @@ class DiffBIRModel(BaseProcessingModel):
         self.scale: int = scale
         self.device: str = device
         self.version: str = version
-        self._inference_loop: Optional[BSRInferenceLoop] = None  # Lazy initialization
+        self._inference_loop: BSRInferenceLoop | None = None  # Lazy initialization
 
     @property
     def inference_loop(self) -> BSRInferenceLoop:
@@ -89,11 +88,11 @@ class DiffBIRModel(BaseProcessingModel):
 
     def process(
         self,
-        image_path: Union[str, Path],
-        output_dir: Union[str, Path],
-        scale: Optional[int] = None,
+        image_path: str | Path,
+        output_dir: str | Path,
+        scale: int | None = None,
         **kwargs,
-    ) -> List[Path]:
+    ) -> list[Path]:
         """Apply super-resolution to the image using DiffBIR."""
         image_path = Path(image_path)
         output_dir = Path(output_dir)

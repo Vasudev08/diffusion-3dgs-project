@@ -5,7 +5,8 @@ LangChain agent for orchestrating the image processing pipeline.
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import override
+
 
 from langchain.agents import AgentExecutor, create_openai_functions_agent
 from langchain.memory import ConversationBufferWindowMemory
@@ -49,8 +50,7 @@ def create_llm(config: LLMConfig) -> BaseChatModel:
             from langchain_google_genai import ChatGoogleGenerativeAI
         except ImportError:
             raise ImportError(
-                "langchain-google-genai is required for Google provider. "
-                "Install it with: pip install langchain-google-genai"
+                "langchain-google-genai is required for Google provider. Install it with: pip install langchain-google-genai"
             )
 
         # ChatGoogleGenerativeAI reads GOOGLE_API_KEY from environment automatically
@@ -65,15 +65,14 @@ def create_llm(config: LLMConfig) -> BaseChatModel:
             from langchain_openai import ChatOpenAI
         except ImportError:
             raise ImportError(
-                "langchain-openai is required for OpenAI provider. "
-                "Install it with: pip install langchain-openai"
+                "langchain-openai is required for OpenAI provider. Install it with: pip install langchain-openai"
             )
 
         # ChatOpenAI reads OPENAI_API_KEY from environment automatically
-        return ChatOpenAI(  # type: ignore
+        return ChatOpenAI(
             model=config.model_name,
             temperature=config.temperature,
-            max_tokens=config.max_tokens,
+            max_completion_tokens=config.max_tokens,
         )
 
     elif provider == "anthropic":
@@ -81,21 +80,21 @@ def create_llm(config: LLMConfig) -> BaseChatModel:
             from langchain_anthropic import ChatAnthropic
         except ImportError:
             raise ImportError(
-                "langchain-anthropic is required for Anthropic provider. "
-                "Install it with: pip install langchain-anthropic"
+                "langchain-anthropic is required for Anthropic provider. Install it with: pip install langchain-anthropic"
             )
 
         # ChatAnthropic reads ANTHROPIC_API_KEY from environment automatically
-        return ChatAnthropic(  # type: ignore
-            model=config.model_name,
+        return ChatAnthropic(
+            model_name=config.model_name,
             temperature=config.temperature,
-            max_tokens=config.max_tokens,
+            max_tokens_to_sample=config.max_tokens,
+            timeout=None,
+            stop=None,
         )
 
     else:
         raise ValueError(
-            f"Unsupported provider: {provider}. "
-            f"Supported providers are: google, openai, anthropic"
+            f"Unsupported provider: {provider}. Supported providers are: google, openai, anthropic"
         )
 
 
@@ -112,9 +111,9 @@ class RoleConfiguration:
     """Configuration for a model role in the prompt."""
 
     display_name: str
-    general_guidance: Optional[str] = None
-    model_guidance: List[ModelGuidance] = field(default_factory=list)
-    shared_notes: Optional[str] = None
+    general_guidance: str | None = None
+    model_guidance: list[ModelGuidance] = field(default_factory=list)
+    shared_notes: str | None = None
 
 
 class ImageAnalysisTool(BaseTool):
@@ -174,6 +173,7 @@ class ModelExecutionTool(BaseTool):
             **kwargs,
         )
 
+    @override
     def _run(self, model_name: str, parameters: str = "{}") -> str:
         """Execute a model with given parameters."""
         model = self.model_registry.get(model_name)
@@ -210,7 +210,7 @@ class AgenticImageProcessor:
         # Create agent
         self.agent: AgentExecutor = self._create_agent()
 
-    def _get_role_configurations(self) -> Dict[str, RoleConfiguration]:
+    def _get_role_configurations(self) -> dict[str, RoleConfiguration]:
         """Get structured configurations for each role."""
         return {
             "view_generation": RoleConfiguration(
@@ -235,10 +235,10 @@ class AgenticImageProcessor:
             ),
         }
 
-    def _build_model_descriptions(self, roles: Dict[str, List[str]]) -> str:
+    def _build_model_descriptions(self, roles: dict[str, list[str]]) -> str:
         """Build model descriptions from role configurations."""
         role_configs = self._get_role_configurations()
-        model_descriptions = []
+        model_descriptions: list[str] = []
 
         for role_key, model_names in roles.items():
             config = role_configs.get(role_key)

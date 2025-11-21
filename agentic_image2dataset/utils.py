@@ -3,13 +3,11 @@ Utility functions for image analysis and processing.
 """
 
 from pathlib import Path
-from typing import Any, Dict, List
-
 import cv2
 import numpy as np
 
 
-def analyze_image_quality(image_path: Path) -> Dict[str, Any]:
+def analyze_image_quality(image_path: Path) -> dict[str, float | int | bool | str]:
     """
     Analyze image quality and characteristics.
 
@@ -20,8 +18,6 @@ def analyze_image_quality(image_path: Path) -> Dict[str, Any]:
         Dictionary containing analysis results
     """
     image = cv2.imread(str(image_path))
-    if image is None:
-        raise ValueError(f"Could not load image: {image_path}")
 
     # Convert to grayscale for analysis
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -109,7 +105,7 @@ def analyze_image_quality(image_path: Path) -> Dict[str, Any]:
     return analysis
 
 
-def detect_image_issues(image_path: Path) -> List[str]:
+def detect_image_issues(image_path: Path) -> list[str]:
     """
     Detect potential issues with the input image.
 
@@ -141,53 +137,6 @@ def detect_image_issues(image_path: Path) -> List[str]:
         issues.append("Image appears desaturated")
 
     return issues
-
-
-def suggest_processing_order(analysis: Dict[str, Any]) -> List[str]:
-    """
-    Suggest the optimal processing order based on image analysis.
-
-    Args:
-        analysis: Image analysis results
-
-    Returns:
-        List of processing steps in suggested order
-    """
-    steps = []
-
-    # If image is blurry or low resolution, suggest super-resolution first
-    if analysis["is_blurry"] or analysis["resolution_quality"] in ["low", "medium"]:
-        steps.append("super_resolution")
-
-    # Always suggest view generation
-    steps.append("view_generation")
-
-    # If super-resolution wasn't applied first, suggest it after view generation
-    if "super_resolution" not in steps:
-        steps.append("super_resolution")
-
-    return steps
-
-
-def get_optimal_view_count(analysis: Dict[str, Any]) -> int:
-    """
-    Determine optimal number of views to generate based on image characteristics.
-
-    Args:
-        analysis: Image analysis results
-
-    Returns:
-        Suggested number of views
-    """
-    base_views = 24
-
-    # Adjust based on scene complexity
-    if analysis["scene_complexity"] == "high":
-        return min(base_views + 12, 48)  # More views for complex scenes
-    elif analysis["scene_complexity"] == "low":
-        return max(base_views - 8, 12)  # Fewer views for simple scenes
-
-    return base_views
 
 
 def fix_transforms(transforms_path: Path) -> None:

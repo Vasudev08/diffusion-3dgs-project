@@ -4,7 +4,7 @@ Base classes for processing models in the agentic pipeline.
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Union
+from typing import Callable
 
 import numpy as np
 from PIL import Image
@@ -19,8 +19,8 @@ class BaseProcessingModel(ABC):
 
     @abstractmethod
     def process(
-        self, image_path: Union[str, Path], output_dir: Union[str, Path], **kwargs
-    ) -> List[Path]:
+        self, image_path: str | Path, output_dir: str | Path, **kwargs
+    ) -> list[Path]:
         """
         Process an image and save results to output directory.
 
@@ -44,17 +44,17 @@ class ModelRegistry:
     """Registry for managing available processing models with lazy initialization and role-based organization."""
 
     def __init__(self):
-        self._model_factories: Dict[str, Callable[[], BaseProcessingModel]] = {}
-        self._model_roles: Dict[str, str] = {}  # Maps model name to role
-        self._role_registries: Dict[
-            str, List[str]
+        self._model_factories: dict[str, Callable[[], BaseProcessingModel]] = {}
+        self._model_roles: dict[str, str] = {}  # Maps model name to role
+        self._role_registries: dict[
+            str, list[str]
         ] = {}  # Maps role to list of model names
 
     def register(
         self,
         name: str,
         model_factory: Callable[[], BaseProcessingModel],
-        role: Optional[str] = None,
+        role: str | None = None,
     ):
         """
         Register a model factory function.
@@ -71,7 +71,7 @@ class ModelRegistry:
                 self._role_registries[role] = []
             self._role_registries[role].append(name)
 
-    def get(self, name: str) -> Optional[BaseProcessingModel]:
+    def get(self, name: str) -> BaseProcessingModel | None:
         """
         Get a model by name, creating a new instance each time.
 
@@ -87,23 +87,23 @@ class ModelRegistry:
         # Create a new model instance each time
         return self._model_factories[name]()
 
-    def list_available(self) -> List[str]:
+    def list_available(self) -> list[str]:
         """List names of all available models."""
         return list(self._model_factories.keys())
 
-    def list_by_role(self, role: str) -> List[str]:
+    def list_by_role(self, role: str) -> list[str]:
         """List names of models in a specific role/category."""
         return self._role_registries.get(role, [])
 
-    def get_role(self, model_name: str) -> Optional[str]:
+    def get_role(self, model_name: str) -> str | None:
         """Get the role/category of a model."""
         return self._model_roles.get(model_name)
 
-    def get_all_roles(self) -> Dict[str, List[str]]:
+    def get_all_roles(self) -> dict[str, list[str]]:
         """Get all roles and their associated models."""
         return dict(self._role_registries)
 
-    def get_all(self) -> Dict[str, BaseProcessingModel]:
+    def get_all(self) -> dict[str, BaseProcessingModel]:
         """Get all registered models, creating new instances."""
         result = {}
         for name in self._model_factories.keys():
@@ -113,7 +113,7 @@ class ModelRegistry:
         return result
 
 
-def load_image(image_path: Union[str, Path]) -> np.ndarray:
+def load_image(image_path: str | Path) -> np.ndarray:
     """Load an image and return as numpy array."""
     image_path = Path(image_path)
     if not image_path.exists():
@@ -123,7 +123,7 @@ def load_image(image_path: Union[str, Path]) -> np.ndarray:
     return np.array(image)
 
 
-def save_image(image: np.ndarray, output_path: Union[str, Path]) -> Path:
+def save_image(image: np.ndarray, output_path: str | Path) -> Path:
     """Save a numpy array as an image."""
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
