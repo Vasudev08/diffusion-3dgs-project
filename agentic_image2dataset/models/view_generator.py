@@ -329,4 +329,11 @@ class StableVirtualCameraModel(BaseProcessingModel):
 
     def get_description(self) -> str:
         """Get model description."""
-        return "Stable Virtual Camera model for generating novel views. Supports all task types: img2trajvid_s-prob, img2img, img2vid, img2trajvid"
+        return (
+            "Stable Virtual Camera model for generating novel views. "
+            "Output dimensions: 576x576. "
+            "Supports task types: img2trajvid_s-prob (single image + trajectory), img2img, img2vid, img2trajvid. "
+            "Key parameters: num_views (default: 24), trajectory (default: 'orbit'), "
+            "guidance_scale (default: [4.0, 2.0]), num_steps (default: 50), "
+            "use_traj_prior (default: True), seed (default: 23)."
+        )

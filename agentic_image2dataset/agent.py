@@ -184,7 +184,10 @@ class ModelExecutionTool(BaseTool):
         params: dict[str, object] = json.loads(parameters)
 
         # Execute the model
-        results = model.process(self.input_path, self.output_dir, **params)
+        try:
+            results = model.process(self.input_path, self.output_dir, **params)
+        except Exception as e:
+            return f"Failed to execute model '{model_name}': {str(e)}"
 
         return f"Model '{model_name}' executed successfully. Generated {len(results)} outputs: {[str(p) for p in results]}"
 
@@ -216,7 +219,12 @@ class AgenticImageProcessor:
             "view_generation": RoleConfiguration(
                 display_name="View Generation Models",
                 general_guidance=None,
-                model_guidance=[],
+                model_guidance=[
+                    ModelGuidance(
+                        model_name="stable_virtual_camera",
+                        guidance_text="Works best when the input image is aligned to make generating views in an orbit trajectory easier (e.g., object centered and upright). Output image dimensions are 576x576",
+                    ),
+                ],
             ),
             "super_resolution": RoleConfiguration(
                 display_name="Super-Resolution Models",
@@ -232,6 +240,17 @@ class AgenticImageProcessor:
                     ),
                 ],
                 shared_notes="Both models support 4x upscaling by default",
+            ),
+            "image_editing": RoleConfiguration(
+                display_name="Image Editing Models",
+                general_guidance="Use for generating alternative views or modifying image perspectives:",
+                model_guidance=[
+                    ModelGuidance(
+                        model_name="qwen_image_edit",
+                        guidance_text="Use 'qwen_image_edit' to generate views parallel to the horizontal axis or modify image content based on text prompts",
+                    ),
+                ],
+                shared_notes="Useful for creating additional camera angles when view generation models are insufficient",
             ),
         }
 
@@ -359,7 +378,7 @@ First, use the analyze_image tool to understand the image characteristics.
 Then, based on the analysis, decide which models to use and in what order.
 
 Consider:
-1. Should we apply super-resolution first or after view generation?
+1. Should we apply super-resolution before, after view generation, or both?
 2. How many views should we generate?
 3. What parameters should we use for each model?
 

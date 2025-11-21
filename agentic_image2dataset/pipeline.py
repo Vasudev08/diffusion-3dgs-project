@@ -12,6 +12,7 @@ from agentic_image2dataset.config import PipelineConfig
 from agentic_image2dataset.models.base import ModelRegistry
 from agentic_image2dataset.models.super_resolution import AdcSRModel, DiffBIRModel
 from agentic_image2dataset.models.view_generator import StableVirtualCameraModel
+from agentic_image2dataset.models.qwen_edit import QwenImageEditModel
 from agentic_image2dataset.utils import (
     analyze_image_quality,
     detect_image_issues,
@@ -69,6 +70,14 @@ class AgenticPipeline:
             )
 
         self.model_registry.register("adcsr", create_adcsr, role="super_resolution")
+
+        # Register Qwen Image Edit model factory
+        def create_qwen_edit():
+            return QwenImageEditModel(device=self.config.model.device)
+
+        self.model_registry.register(
+            "qwen_image_edit", create_qwen_edit, role="image_editing"
+        )
 
     def process(
         self,

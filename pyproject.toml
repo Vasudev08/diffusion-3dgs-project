@@ -15,7 +15,7 @@ dependencies = [
     "fire",
     "safetensors",
     "huggingface-hub",
-    "imageio",
+    "imageio[ffmpeg]",
     "scipy",
     "matplotlib",
     "scikit-image",
@@ -40,6 +40,17 @@ dependencies = [
     "fairscale>=0.4.4",
     "python-dotenv>=1.2.1",
     "peft>=0.18.0",
+    "diffusers",
+    "ftfy",
+    "roma",
+    "colorama",
+    "viser",
+    "tyro",
+    "ninja",
+    "splines",
+    "kornia",
+    "open-clip-torch",
+    "sdnq",
 ]
 
 [project.optional-dependencies]
@@ -57,3 +68,6 @@ all = [
     "langchain-openai~=0.3.0",
     "langchain-anthropic~=0.3.0",
 ]
+
+[tool.uv.sources]
+sdnq = { git = "https://github.com/Disty0/sdnq" }
