@@ -22,10 +22,9 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 # Import models to ensure they are registered
-from agentic_image2dataset.models.qwen_edit import QwenImageEditModel
-from agentic_image2dataset.models.super_resolution.adcsr import AdcSRModel
-from agentic_image2dataset.models.super_resolution.diffbir import DiffBIRModel
-from agentic_image2dataset.models.view_generator import StableVirtualCameraModel
+from agentic_image2dataset.models.image_edit import QwenImageEditModel
+from agentic_image2dataset.models.super_resolution import AdcSRModel, DiffBIRModel
+from agentic_image2dataset.models.view_generation import StableVirtualCameraModel
 
 
 def get_peak_memory_mb():

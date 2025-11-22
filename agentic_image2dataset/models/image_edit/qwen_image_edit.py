@@ -29,7 +29,7 @@ class QwenImageEditModel(BaseProcessingModel):
             print("Loading Quantized Qwen Image Edit pipeline...")
             self._pipeline = QwenImageEditPipeline.from_pretrained(
                 "Disty0/Qwen-Image-Edit-SDNQ-uint4-svd-r32",
-                dtype=torch.bfloat16,
+                torch_dtype=torch.bfloat16,
             )
             self._pipeline.enable_model_cpu_offload()
             self._pipeline.set_progress_bar_config(disable=None)
