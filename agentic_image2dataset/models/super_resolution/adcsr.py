@@ -60,8 +60,8 @@ class AdcSRModel(BaseProcessingModel):
         device = torch.device(self.device)
 
         # Load Stable Diffusion pipeline
-        # model_id = "stabilityai/stable-diffusion-2-1-base"
-        model_id = "Manojb/stable-diffusion-2-1-base"
+        model_id = "stabilityai/stable-diffusion-2-1-base"
+        # model_id = "Manojb/stable-diffusion-2-1-base"
         pipe = StableDiffusionPipeline.from_pretrained(model_id).to(device)
 
         unet = pipe.unet
