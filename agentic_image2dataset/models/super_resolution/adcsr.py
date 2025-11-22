@@ -59,9 +59,26 @@ class AdcSRModel(BaseProcessingModel):
 
         device = torch.device(self.device)
 
-        # Load Stable Diffusion pipeline
-        model_id = "stabilityai/stable-diffusion-2-1-base"
-        pipe = StableDiffusionPipeline.from_pretrained(model_id).to(device)
+        # Load Stable Diffusion pipeline with fallback
+        # Try official Stability AI model first, fall back to public mirror if auth fails
+        primary_model_id = "stabilityai/stable-diffusion-2-1-base"
+        fallback_model_id = "Manojb/stable-diffusion-2-1-base"
+        
+        try:
+            print(f"Attempting to load {primary_model_id}...")
+            pipe = StableDiffusionPipeline.from_pretrained(primary_model_id).to(device)
+            print(f"Successfully loaded {primary_model_id}")
+        except (OSError, ValueError) as e:
+            print(f"Could not load {primary_model_id}: {e}")
+            print(f"Falling back to {fallback_model_id}...")
+            try:
+                pipe = StableDiffusionPipeline.from_pretrained(fallback_model_id).to(device)
+                print(f"Successfully loaded {fallback_model_id}")
+            except Exception as fallback_error:
+                raise RuntimeError(
+                    f"Failed to load both {primary_model_id} and {fallback_model_id}. "
+                    f"Error: {fallback_error}"
+                )
 
         unet = pipe.unet
 
