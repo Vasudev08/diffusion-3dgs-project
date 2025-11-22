@@ -4,7 +4,6 @@ Stable Virtual Camera model wrapper for generating novel views.
 
 import glob
 import os
-import shutil
 import sys
 from pathlib import Path
 
@@ -317,15 +316,7 @@ class StableVirtualCameraModel(BaseProcessingModel):
             return_paths=True,
         )
 
-        # Copy all images to the root of output_dir for the pipeline to find them easily
-        # (pipeline._create_final_dataset uses glob("*") which only looks at root level)
-        final_paths = []
-        for i, img_path in enumerate(img_paths):
-            final_path = output_dir / f"view_{i:04d}.png"
-            shutil.copy2(img_path, final_path)
-            final_paths.append(final_path)
-
-        return final_paths if final_paths else []
+        return img_paths if img_paths else []
 
     def get_description(self) -> str:
         """Get model description."""

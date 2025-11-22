@@ -34,7 +34,6 @@ class ModelConfig:
     num_views: int = 24
     super_resolution_factor: int = 4
     view_generation_trajectory: str = "orbit"  # orbit, spiral, arc
-    colmap_quality: str = "high"  # high, medium, low
 
 
 @dataclass
@@ -45,7 +44,6 @@ class PipelineConfig:
     model: ModelConfig
     output_dir: Path
     input_image: Path
-    skip_colmap: bool = False
     verbose: bool = True
 
     @classmethod
@@ -66,6 +64,5 @@ class PipelineConfig:
             model=model_config,
             output_dir=Path(str(config_dict["output_dir"])),
             input_image=Path(str(config_dict["input_image"])),
-            skip_colmap=bool(config_dict.get("skip_colmap", False)),
             verbose=bool(config_dict.get("verbose", True)),
         )
