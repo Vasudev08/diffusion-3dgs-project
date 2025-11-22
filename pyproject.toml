@@ -19,6 +19,7 @@ dependencies = [
     "scipy",
     "matplotlib",
     "scikit-image",
+    "psutil",
     # DiffBIR dependencies
     "omegaconf>=2.3.0",
     "accelerate>=0.28.0",
@@ -71,3 +72,8 @@ all = [
 
 [tool.uv.sources]
 sdnq = { git = "https://github.com/Disty0/sdnq" }
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.1",
+]

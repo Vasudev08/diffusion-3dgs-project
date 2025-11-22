@@ -1,0 +1,75 @@
+{
+  "diffbir": {
+    "128x128": {
+      "peak_vram_mb": 10634.51611328125,
+      "time_seconds": 27.06834578514099,
+      "status": "success"
+    },
+    "256x256": {
+      "peak_vram_mb": 11961.7080078125,
+      "time_seconds": 5.258243083953857,
+      "status": "success"
+    },
+    "512x512": {
+      "peak_vram_mb": 22859.0830078125,
+      "time_seconds": 260.4643054008484,
+      "status": "success"
+    },
+    "regression": {
+      "slope_mb_per_pixel": 0.05136618301981973,
+      "intercept_mb": 9260.684244791672,
+      "formula": "VRAM_MB = 9260.68 + 5.14e-02 * Pixels"
+    }
+  },
+  "adcsr": {
+    "128x128": {
+      "peak_vram_mb": 9611.6064453125,
+      "time_seconds": 25.36146831512451,
+      "status": "success"
+    },
+    "256x256": {
+      "peak_vram_mb": 7827.25,
+      "time_seconds": 5.094730377197266,
+      "status": "success"
+    },
+    "512x512": {
+      "peak_vram_mb": 13589.7578125,
+      "time_seconds": 10.332715511322021,
+      "status": "success"
+    },
+    "regression": {
+      "slope_mb_per_pixel": 0.019936422506968185,
+      "intercept_mb": 8056.40299479167,
+      "formula": "VRAM_MB = 8056.40 + 1.99e-02 * Pixels"
+    }
+  },
+  "stable_virtual_camera": {
+    "576x576": {
+      "peak_vram_mb": 19220.13818359375,
+      "time_seconds": 620.9829294681549,
+      "status": "success"
+    }
+  },
+  "qwen_image_edit": {
+    "512x512": {
+      "peak_vram_mb": 16441.35595703125,
+      "time_seconds": 597.6246047019958,
+      "status": "success"
+    },
+    "768x768": {
+      "peak_vram_mb": 16441.57080078125,
+      "time_seconds": 552.2120792865753,
+      "status": "success"
+    },
+    "1024x1024": {
+      "peak_vram_mb": 16441.57080078125,
+      "time_seconds": 544.1527214050293,
+      "status": "success"
+    },
+    "regression": {
+      "slope_mb_per_pixel": 2.556437746149158e-07,
+      "intercept_mb": 16441.337232117246,
+      "formula": "VRAM_MB = 16441.34 + 2.56e-07 * Pixels"
+    }
+  }
+}

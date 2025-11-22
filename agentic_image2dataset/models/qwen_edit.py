@@ -3,6 +3,7 @@ Qwen Image Edit model wrapper.
 """
 
 from pathlib import Path
+
 import torch
 from PIL import Image
 
@@ -28,7 +29,7 @@ class QwenImageEditModel(BaseProcessingModel):
             print("Loading Quantized Qwen Image Edit pipeline...")
             self._pipeline = QwenImageEditPipeline.from_pretrained(
                 "Disty0/Qwen-Image-Edit-SDNQ-uint4-svd-r32",
-                torch_dtype=torch.bfloat16,
+                dtype=torch.bfloat16,
             )
             self._pipeline.enable_model_cpu_offload()
             self._pipeline.set_progress_bar_config(disable=None)
@@ -97,7 +98,6 @@ class QwenImageEditModel(BaseProcessingModel):
         """Get model description."""
         return (
             "Qwen Image Edit model for editing images based on text prompts. "
-            "Useful for changing view perspectives or modifying image content. "
-            "Key parameters: prompt (default: 'Generate a view parallel to the horizontal axis'), "
-            "num_inference_steps (default: 50), guidance_scale (default: 4.0), seed (default: 0)."
+            "Useful for generating alternative views or modifying image content. "
+            "Supports text-based editing instructions."
         )

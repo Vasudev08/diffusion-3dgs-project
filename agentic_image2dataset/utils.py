@@ -3,8 +3,55 @@ Utility functions for image analysis and processing.
 """
 
 from pathlib import Path
+
 import cv2
 import numpy as np
+import psutil
+import torch
+
+
+def get_system_resources() -> dict[str, float]:
+    """
+    Get available system resources (RAM and VRAM).
+
+    Returns:
+        Dictionary containing:
+        - system_ram_total_gb: Total system RAM in GB
+        - system_ram_available_gb: Available system RAM in GB
+        - gpu_vram_total_gb: Total GPU VRAM in GB (if CUDA available)
+        - gpu_vram_available_gb: Available GPU VRAM in GB (if CUDA available)
+        - gpu_name: Name of the GPU (if CUDA available)
+    """
+    resources = {}
+
+    # System RAM
+    vm = psutil.virtual_memory()
+    resources["system_ram_total_gb"] = vm.total / (1024**3)
+    resources["system_ram_available_gb"] = vm.available / (1024**3)
+
+    # GPU VRAM
+    if torch.cuda.is_available():
+        resources["gpu_vram_total_gb"] = torch.cuda.get_device_properties(
+            0
+        ).total_memory / (1024**3)
+        # Note: This is an approximation. PyTorch doesn't give exact "available" memory easily
+        # without allocating. We can use memory_reserved and memory_allocated to estimate.
+        # Or use pynvml if we wanted to be very precise, but torch is enough for now.
+        # We'll use the total - reserved as a rough proxy for what's "free" for torch to use,
+        # but really we care about the total capacity for the model.
+        # A better metric for "available" might be total - allocated.
+        current_device = torch.cuda.current_device()
+        resources["gpu_vram_available_gb"] = (
+            torch.cuda.get_device_properties(current_device).total_memory
+            - torch.cuda.memory_allocated(current_device)
+        ) / (1024**3)
+        resources["gpu_name"] = torch.cuda.get_device_name(current_device)
+    else:
+        resources["gpu_vram_total_gb"] = 0.0
+        resources["gpu_vram_available_gb"] = 0.0
+        resources["gpu_name"] = "None"
+
+    return resources
 
 
 def analyze_image_quality(image_path: Path) -> dict[str, float | int | bool | str]:
@@ -147,6 +194,7 @@ def fix_transforms(transforms_path: Path) -> None:
         transforms_path: Path to the transforms.json file
     """
     import json
+
     import cv2
 
     print(f"Processing {transforms_path}...")
