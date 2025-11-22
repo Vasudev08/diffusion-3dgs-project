@@ -25,6 +25,56 @@ except ImportError:
     IN_COLAB = False
     print("Warning: Not running in Google Colab. Some features (upload/download) will be disabled.")
 
+# ============================================================================
+# MONKEY-PATCH: Redirect Stability AI models to public Manojb mirrors
+# This allows the entire codebase to use public models without authentication
+# ============================================================================
+def patch_huggingface_models():
+    """Monkey-patch diffusers to redirect stabilityai models to Manojb mirrors."""
+    try:
+        from diffusers import StableDiffusionPipeline, AutoencoderKL
+        from diffusers.pipelines.stable_diffusion import StableDiffusionPipeline as SDPipeline
+        
+        # Store original methods
+        original_sd_from_pretrained = StableDiffusionPipeline.from_pretrained
+        original_vae_from_pretrained = AutoencoderKL.from_pretrained
+        
+        # Model redirects
+        MODEL_REDIRECTS = {
+            "stabilityai/stable-diffusion-2-1-base": "Manojb/stable-diffusion-2-1-base",
+            "stabilityai/stable-diffusion-2-base": "Manojb/stable-diffusion-2-base",
+            "stabilityai/stable-diffusion-2-1": "Manojb/stable-diffusion-2-1",
+        }
+        
+        def patched_sd_from_pretrained(pretrained_model_name_or_path, *args, **kwargs):
+            """Redirect stabilityai models to Manojb mirrors."""
+            if pretrained_model_name_or_path in MODEL_REDIRECTS:
+                original_model = pretrained_model_name_or_path
+                pretrained_model_name_or_path = MODEL_REDIRECTS[pretrained_model_name_or_path]
+                print(f"Redirecting {original_model} → {pretrained_model_name_or_path}")
+            return original_sd_from_pretrained(pretrained_model_name_or_path, *args, **kwargs)
+        
+        def patched_vae_from_pretrained(pretrained_model_name_or_path, *args, **kwargs):
+            """Redirect stabilityai models to Manojb mirrors."""
+            if pretrained_model_name_or_path in MODEL_REDIRECTS:
+                original_model = pretrained_model_name_or_path
+                pretrained_model_name_or_path = MODEL_REDIRECTS[pretrained_model_name_or_path]
+                print(f"Redirecting {original_model} → {pretrained_model_name_or_path}")
+            return original_vae_from_pretrained(pretrained_model_name_or_path, *args, **kwargs)
+        
+        # Apply patches
+        StableDiffusionPipeline.from_pretrained = staticmethod(patched_sd_from_pretrained)
+        AutoencoderKL.from_pretrained = staticmethod(patched_vae_from_pretrained)
+        
+        print("Hugging Face model redirect patch applied successfully!")
+        
+    except ImportError as e:
+        print(f"Could not apply model redirect patch: {e}")
+
+# Apply the patch before importing any project modules
+patch_huggingface_models()
+# ============================================================================
+
 # Add project root to python path
 sys.path.append(str(Path(__file__).parent))
 
