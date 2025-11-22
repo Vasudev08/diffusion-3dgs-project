@@ -7,7 +7,7 @@ from pathlib import Path
 import torch
 from PIL import Image
 
-from .base import BaseProcessingModel
+from ..base import BaseProcessingModel
 
 
 class QwenImageEditModel(BaseProcessingModel):

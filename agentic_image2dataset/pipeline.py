@@ -10,9 +10,9 @@ from agentic_image2dataset.agent import AgenticImageProcessor
 from agentic_image2dataset.colmap_processor import COLMAPProcessor
 from agentic_image2dataset.config import PipelineConfig
 from agentic_image2dataset.models.base import ModelRegistry
+from agentic_image2dataset.models.image_edit import QwenImageEditModel
 from agentic_image2dataset.models.super_resolution import AdcSRModel, DiffBIRModel
-from agentic_image2dataset.models.view_generator import StableVirtualCameraModel
-from agentic_image2dataset.models.qwen_edit import QwenImageEditModel
+from agentic_image2dataset.models.view_generation import StableVirtualCameraModel
 from agentic_image2dataset.utils import (
     analyze_image_quality,
     detect_image_issues,

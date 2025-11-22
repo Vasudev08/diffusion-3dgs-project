@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-_project_root = Path(__file__).parent.parent.parent
+_project_root = Path(__file__).parent.parent.parent.parent
 _stable_virtual_camera_path = _project_root / "stable-virtual-camera"
 if str(_stable_virtual_camera_path) not in sys.path:
     sys.path.insert(0, str(_stable_virtual_camera_path))
@@ -25,7 +25,7 @@ from seva.modules.conditioner import CLIPConditioner
 from seva.sampling import DiscreteDenoiser
 from seva.utils import load_model
 
-from .base import BaseProcessingModel
+from ..base import BaseProcessingModel
 
 
 def process_scene(
