@@ -52,6 +52,8 @@ dependencies = [
     "kornia",
     "open-clip-torch",
     "sdnq",
+    "vision-aided-loss",
+    "tenacity",
 ]
 
 [project.optional-dependencies]

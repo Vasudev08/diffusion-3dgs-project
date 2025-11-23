@@ -4,7 +4,7 @@ Processing models for the agentic pipeline.
 
 from .base import BaseProcessingModel, ModelRegistry
 from .image_edit import QwenImageEditModel
-from .super_resolution import AdcSRModel, DiffBIRModel
+from .super_resolution import AdcSRModel, DiffBIRModel, HYPIRModel
 from .view_generation import StableVirtualCameraModel
 
 __all__ = [
@@ -13,5 +13,6 @@ __all__ = [
     "StableVirtualCameraModel",
     "DiffBIRModel",
     "AdcSRModel",
+    "HYPIRModel",
     "QwenImageEditModel",
 ]
