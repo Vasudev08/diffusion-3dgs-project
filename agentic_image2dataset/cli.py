@@ -39,10 +39,6 @@ Examples:
   export ANTHROPIC_API_KEY=your-api-key
   python -m agentic_image2dataset.cli --input photo.jpg --output dataset/ \\
     --llm-provider anthropic --llm-model claude-3-5-sonnet-20241022
-
-  # Skip COLMAP preprocessing
-  python -m agentic_image2dataset.cli --input photo.jpg --output dataset/ \\
-    --skip-colmap
         """,
     )
 
@@ -76,6 +72,13 @@ Examples:
         help="LLM temperature for planning",
     )
 
+    parser.add_argument(
+        "--llm-max-tokens",
+        type=int,
+        default=None,
+        help="LLM max tokens for planning",
+    )
+
     # Model configuration
     parser.add_argument(
         "--device",
@@ -91,22 +94,17 @@ Examples:
     )
 
     parser.add_argument(
+        "--view-generation-trajectory",
+        default="orbit",
+        choices=["orbit", "spiral", "arc"],
+        help="View generation trajectory (orbit, spiral, arc)",
+    )
+
+    parser.add_argument(
         "--super-resolution-factor",
         type=int,
         default=4,
         help="Super-resolution scale factor",
-    )
-
-    parser.add_argument(
-        "--colmap-quality",
-        default="high",
-        choices=["high", "medium", "low"],
-        help="COLMAP reconstruction quality",
-    )
-
-    # Processing options
-    parser.add_argument(
-        "--skip-colmap", action="store_true", help="Skip COLMAP preprocessing"
     )
 
     parser.add_argument(
@@ -152,8 +150,6 @@ Examples:
         result = pipeline.process(
             input_image=args.input,
             output_dir=args.output,
-            num_views=args.num_views,
-            skip_colmap=args.skip_colmap,
         )
 
         if result["success"]:
@@ -187,13 +183,14 @@ def _create_config(args) -> PipelineConfig:
         provider=args.llm_provider,
         model_name=args.llm_model,
         temperature=args.llm_temperature,
+        max_tokens=args.llm_max_tokens,
     )
 
     model_config = ModelConfig(
         device=args.device,
         num_views=args.num_views or 24,
         super_resolution_factor=args.super_resolution_factor,
-        colmap_quality=args.colmap_quality,
+        view_generation_trajectory=args.view_generation_trajectory,
     )
 
     return PipelineConfig(
@@ -201,7 +198,6 @@ def _create_config(args) -> PipelineConfig:
         model=model_config,
         output_dir=args.output,
         input_image=args.input,
-        skip_colmap=args.skip_colmap,
         verbose=args.verbose,
     )
 
@@ -214,7 +210,6 @@ def _list_models():
         model=ModelConfig(),
         output_dir=Path("."),
         input_image=Path("."),
-        skip_colmap=True,
         verbose=False,
     )
 
@@ -237,7 +232,6 @@ def _show_model_info(model_name: str):
         model=ModelConfig(),
         output_dir=Path("."),
         input_image=Path("."),
-        skip_colmap=True,
         verbose=False,
     )
 

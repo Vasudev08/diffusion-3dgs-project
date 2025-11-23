@@ -6,7 +6,7 @@ import shutil
 from pathlib import Path
 
 from agentic_image2dataset.agent import AgenticImageProcessor
-from agentic_image2dataset.config import PipelineConfig
+from agentic_image2dataset.config import LLMConfig, PipelineConfig
 from agentic_image2dataset.models.base import ModelRegistry
 from agentic_image2dataset.models.image_edit import QwenImageEditModel
 from agentic_image2dataset.models.super_resolution import AdcSRModel, DiffBIRModel
@@ -29,7 +29,7 @@ class AgenticPipeline:
         self._initialize_models()
 
         # Initialize agent (will be re-initialized per process call with specific workspace)
-        self.agent_config = config.llm
+        self.agent_config: LLMConfig = config.llm
 
     def _initialize_models(self):
         """Register model factories for lazy initialization."""
@@ -76,8 +76,6 @@ class AgenticPipeline:
         self,
         input_image: Path,
         output_dir: Path,
-        num_views: int | None = None,
-        skip_colmap: bool = False,
     ) -> dict[str, object]:
         """
         Process a single input image into a 3DGS dataset.
@@ -85,8 +83,6 @@ class AgenticPipeline:
         Args:
             input_image: Path to the input image
             output_dir: Directory for output dataset
-            num_views: Number of views to generate (if None, agent decides)
-            skip_colmap: Skip COLMAP preprocessing
 
         Returns:
             Dictionary with processing results
@@ -134,7 +130,7 @@ class AgenticPipeline:
             # Agent decides its own output structure, but we instructed it to use 'output' dir
             agent_output_dir = workspace_dir / "output"
 
-            plan_result = agent.plan_processing(workspace_input_image, agent_output_dir)
+            plan_result = agent.plan_processing(workspace_input_image)
             if not plan_result["success"]:
                 return {
                     "success": False,
@@ -200,17 +196,6 @@ class AgenticPipeline:
             # Cleanup workspace
             if workspace_dir.exists():
                 shutil.rmtree(workspace_dir, ignore_errors=True)
-
-    def _collect_generated_images(self, temp_dir: Path) -> list[Path]:
-        """Collect all generated images from the temp directory."""
-        image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff"}
-        generated_images = []
-
-        for file_path in temp_dir.rglob("*"):
-            if file_path.is_file() and file_path.suffix.lower() in image_extensions:
-                generated_images.append(file_path)
-
-        return generated_images
 
     def get_available_models(self) -> list[str]:
         """Get list of available models."""

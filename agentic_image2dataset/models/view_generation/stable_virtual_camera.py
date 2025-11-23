@@ -294,13 +294,6 @@ class StableVirtualCameraModel(BaseProcessingModel):
             "options": options,
         }
 
-        # Use the shared process_scene function
-        if process_scene is None:
-            raise ImportError(
-                "Could not import process_scene from demo.py. "
-                "Make sure stable-virtual-camera is in the project path."
-            )
-
         img_paths = process_scene(
             task=task,
             scene_path=str(scene_path),

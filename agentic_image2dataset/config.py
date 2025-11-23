@@ -22,7 +22,7 @@ class LLMConfig:
     provider: str = "google"  # google, openai, anthropic
     model_name: str = "gemini-2.5-flash"
     temperature: float = 0.1
-    max_tokens: int = 2000
+    max_tokens: int | None = None
 
 
 @dataclass

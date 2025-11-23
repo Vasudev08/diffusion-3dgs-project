@@ -55,12 +55,10 @@ def main():
     result = pipeline.process(
         input_image=config.input_image,
         output_dir=config.output_dir,
-        num_views=config.model.num_views,
     )
 
     if result["success"]:
         print("✅ Processing completed successfully!")
-        print(f"Generated {result['generated_images']} images")
         print(f"Output directory: {result['output_dir']}")
 
         if result.get("issues"):

@@ -5,6 +5,7 @@ LangChain agent for orchestrating the image processing pipeline.
 import json
 import os
 import shutil
+from abc import ABCMeta
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -121,15 +122,14 @@ class ImageAnalysisTool(BaseTool):
 
     name: str = "analyze_image"
     description: str = "Analyze an image to determine its quality, characteristics, and processing needs"
-    image_path: Path
 
-    def __init__(self, image_path: Path, **kwargs: object):
-        super().__init__(image_path=image_path, **kwargs)
+    def __init__(self, **kwargs: object):
+        super().__init__(**kwargs)
 
-    def _run(self, query: str = "") -> str:
+    def _run(self, image_path: Path, query: str = "") -> str:
         """Analyze the input image."""
-        analysis = analyze_image_quality(self.image_path)
-        issues = detect_image_issues(self.image_path)
+        analysis = analyze_image_quality(image_path)
+        issues = detect_image_issues(image_path)
 
         result = {
             "analysis": analysis,
@@ -255,6 +255,9 @@ class ModelExecutionToolArgs(BaseModel):
     input_path: str = Field(
         description="Required: The input image or directory path to process. You must explicitly provide the path.",
     )
+    output_dir: str = Field(
+        description="Required: The output directory path to save the results. You must explicitly provide the path.",
+    )
 
 
 class ModelExecutionTool(BaseTool):
@@ -264,24 +267,20 @@ class ModelExecutionTool(BaseTool):
     description: str = "Execute a processing model on an image or directory. You MUST provide the 'input_path' parameter. The 'parameters' argument must be provided as a JSON string."
     args_schema = ModelExecutionToolArgs
     model_registry: ModelRegistry
-    default_input_path: Path
-    output_dir: Path
 
     def __init__(
         self,
         model_registry: ModelRegistry,
-        input_path: Path,
-        output_dir: Path,
         **kwargs: object,
     ):
         super().__init__(
             model_registry=model_registry,
-            default_input_path=input_path,
-            output_dir=output_dir,
             **kwargs,
         )
 
-    def _run(self, model_name: str, input_path: str, parameters: str = "{}") -> str:
+    def _run(
+        self, model_name: str, input_path: str, output_dir: str, parameters: str = "{}"
+    ) -> str:
         """Execute a model with given parameters."""
         model = self.model_registry.get(model_name)
         if model is None:
@@ -300,14 +299,14 @@ class ModelExecutionTool(BaseTool):
 
         # Execute the model
         try:
-            results = model.process(actual_input_path, self.output_dir, **params)
+            results = model.process(actual_input_path, output_dir, **params)
         except Exception as e:
             return f"Failed to execute model '{model_name}': {str(e)}"
 
         return f"Model '{model_name}' executed successfully. Generated {len(results)} outputs: {[str(p) for p in results]}"
 
 
-class FileOperationTool(BaseTool):
+class FileOperationTool(BaseTool, metaclass=ABCMeta):
     """Base class for file operation tools with safety checks."""
 
     workspace_root: Path
@@ -466,14 +465,22 @@ class AgenticImageProcessor:
         self.model_registry: ModelRegistry = model_registry
 
         # Set workspace root, default to current directory if not provided
-        self.workspace_root = workspace_root if workspace_root else Path.cwd()
-        self.workspace_root.mkdir(parents=True, exist_ok=True)
+        workspace_root = workspace_root if workspace_root else Path.cwd()
+        workspace_root.mkdir(parents=True, exist_ok=True)
 
         # Initialize LLM using factory function
         self.llm: BaseChatModel = create_llm(config)
 
         # Create tools
-        self.tools: list[BaseTool] = []
+        self.tools: list[BaseTool] = [
+            ImageAnalysisTool(),
+            ResourceRequirementTool(),
+            ModelExecutionTool(self.model_registry),
+            ListDirectoryTool(workspace_root=workspace_root),
+            CopyFileTool(workspace_root=workspace_root),
+            MoveFileTool(workspace_root=workspace_root),
+            DeleteFileTool(workspace_root=workspace_root),
+        ]
 
         # Create memory
         self.memory: ConversationBufferWindowMemory = ConversationBufferWindowMemory(
@@ -643,27 +650,8 @@ Always explain your reasoning and provide clear feedback on the processing steps
             max_iterations=10,
         )
 
-    def add_tools(self, image_path: Path, output_dir: Path):
-        """Add tools to the agent."""
-        self.tools = [
-            ImageAnalysisTool(image_path),
-            ResourceRequirementTool(),
-            ModelExecutionTool(self.model_registry, image_path, output_dir),
-            ListDirectoryTool(self.workspace_root),
-            CopyFileTool(self.workspace_root),
-            MoveFileTool(self.workspace_root),
-            DeleteFileTool(self.workspace_root),
-        ]
-
-        # Recreate agent with new tools
-        self.agent = self._create_agent()
-
-    def plan_processing(
-        self, image_path: Path, output_dir: Path
-    ) -> dict[str, str | bool]:
+    def plan_processing(self, image_path: Path) -> dict[str, str | bool]:
         """Plan the processing pipeline for the given image."""
-        self.add_tools(image_path, output_dir)
-
         # Create planning prompt
         planning_prompt = f"""
 Analyze the input image at {image_path} and create a processing plan.
