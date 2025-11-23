@@ -23,7 +23,11 @@ if str(project_root) not in sys.path:
 
 # Import models to ensure they are registered
 from agentic_image2dataset.models.image_edit import QwenImageEditModel
-from agentic_image2dataset.models.super_resolution import AdcSRModel, DiffBIRModel
+from agentic_image2dataset.models.super_resolution import (
+    AdcSRModel,
+    DiffBIRModel,
+    HYPIRModel,
+)
 from agentic_image2dataset.models.view_generation import StableVirtualCameraModel
 
 
@@ -116,10 +120,59 @@ def profile_model(model_name, model_class, resolutions, output_dir):
     return results
 
 
+def parse_resolutions(res_str):
+    """Parse resolution string like '512x512,1024x1024' into list of tuples."""
+    resolutions = []
+    for res in res_str.split(","):
+        res = res.strip()
+        try:
+            width, height = res.split("x")
+            resolutions.append((int(width), int(height)))
+        except ValueError:
+            print(f"Warning: Invalid resolution format '{res}', skipping")
+    return resolutions
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Profile VRAM usage of models.")
+    parser = argparse.ArgumentParser(
+        description="Profile VRAM usage of models.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Profile all models with default resolutions
+  python profile_vram.py
+
+  # Profile only specific models
+  python profile_vram.py --models diffbir adcsr
+
+  # Use custom resolutions for all models
+  python profile_vram.py --resolutions 256x256,512x512,1024x1024
+
+  # Profile specific models with custom resolutions
+  python profile_vram.py --models qwen_image_edit --resolutions 512x512,1024x1024
+
+Available models: diffbir, adcsr, hypir, stable_virtual_camera, qwen_image_edit
+        """,
+    )
     parser.add_argument(
         "--output", type=str, default="vram_profile.json", help="Output JSON file"
+    )
+    parser.add_argument(
+        "--models",
+        nargs="+",
+        choices=[
+            "diffbir",
+            "adcsr",
+            "hypir",
+            "stable_virtual_camera",
+            "qwen_image_edit",
+        ],
+        help="Models to profile (default: all models)",
+    )
+    parser.add_argument(
+        "--resolutions",
+        type=str,
+        help="Comma-separated list of resolutions (e.g., '512x512,1024x1024'). Overrides default resolutions for all selected models.",
     )
     args = parser.parse_args()
 
@@ -130,28 +183,62 @@ def main():
     output_dir = Path("temp_profile_output")
     output_dir.mkdir(exist_ok=True)
 
+    # Default resolutions for each model
+    default_resolutions = {
+        "diffbir": [(128, 128), (256, 256), (512, 512)],
+        "adcsr": [(128, 128), (256, 256), (512, 512)],
+        "hypir": [(128, 128), (256, 256), (512, 512)],
+        "stable_virtual_camera": [(576, 576)],
+        "qwen_image_edit": [(512, 512), (768, 768), (1024, 1024)],
+    }
+
     # Models to profile with their specific resolutions
     # Format: (Name, Class, List of (Width, Height))
-    models_to_profile = [
-        (
-            "diffbir",
-            DiffBIRModel,
-            [(128, 128), (256, 256), (512, 512)],
-        ),  # SR model, outputs 4x input
-        (
-            "adcsr",
-            AdcSRModel,
-            [(128, 128), (256, 256), (512, 512)],
-        ),  # SR model, outputs 4x input
-        (
-            "stable_virtual_camera",
-            StableVirtualCameraModel,
-            [(576, 576)],
-        ),  # Fixed resolution model
-        ("qwen_image_edit", QwenImageEditModel, [(512, 512), (768, 768), (1024, 1024)]),
-    ]
+    all_models = {
+        "diffbir": DiffBIRModel,
+        "adcsr": AdcSRModel,
+        "hypir": HYPIRModel,
+        "stable_virtual_camera": StableVirtualCameraModel,
+        "qwen_image_edit": QwenImageEditModel,
+    }
 
-    all_results = {}
+    # Determine which models to profile
+    models_to_run = args.models if args.models else list(all_models.keys())
+
+    # Parse custom resolutions if provided
+    custom_resolutions = None
+    if args.resolutions:
+        custom_resolutions = parse_resolutions(args.resolutions)
+        if not custom_resolutions:
+            print("Error: No valid resolutions provided")
+            return
+
+    # Load existing results if the file exists
+    output_path = Path(args.output)
+    if output_path.exists():
+        print(f"Loading existing results from {args.output}...")
+        with open(output_path, "r") as f:
+            all_results = json.load(f)
+    else:
+        all_results = {}
+
+    # Build list of models to profile
+    models_to_profile = []
+    for model_name in models_to_run:
+        cls = all_models[model_name]
+        # Use custom resolutions if provided, otherwise use defaults
+        resolutions = (
+            custom_resolutions
+            if custom_resolutions
+            else default_resolutions[model_name]
+        )
+        models_to_profile.append((model_name, cls, resolutions))
+
+    print(f"\nModels to profile: {', '.join(models_to_run)}")
+    if custom_resolutions:
+        print(
+            f"Using custom resolutions: {', '.join(f'{w}x{h}' for w, h in custom_resolutions)}"
+        )
 
     for name, cls, resolutions in models_to_profile:
         model_results = profile_model(name, cls, resolutions, output_dir)
@@ -191,7 +278,8 @@ def main():
     # Cleanup
     import shutil
 
-    shutil.rmtree(output_dir)
+    if output_dir.exists():
+        shutil.rmtree(output_dir)
 
 
 if __name__ == "__main__":

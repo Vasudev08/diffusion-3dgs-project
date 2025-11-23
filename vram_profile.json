@@ -71,5 +71,37 @@
       "intercept_mb": 16441.337232117246,
       "formula": "VRAM_MB = 16441.34 + 2.56e-07 * Pixels"
     }
+  },
+  "hypir": {
+    "128x128": {
+      "peak_vram_mb": 7755.60546875,
+      "time_seconds": 6.064614772796631,
+      "status": "success"
+    },
+    "256x256": {
+      "peak_vram_mb": 7773.19921875,
+      "time_seconds": 1.7347266674041748,
+      "status": "success"
+    },
+    "512x512": {
+      "peak_vram_mb": 7847.07421875,
+      "time_seconds": 9.542139768600464,
+      "status": "success"
+    },
+    "768x768": {
+      "peak_vram_mb": 7971.07421875,
+      "time_seconds": 25.196412801742554,
+      "status": "success"
+    },
+    "1024x1024": {
+      "peak_vram_mb": 8590.04345703125,
+      "time_seconds": 44.30913209915161,
+      "status": "success"
+    },
+    "regression": {
+      "slope_mb_per_pixel": 0.0007727014582012831,
+      "intercept_mb": 7681.028751679944,
+      "formula": "VRAM_MB = 7681.03 + 7.73e-04 * Pixels"
+    }
   }
 }
