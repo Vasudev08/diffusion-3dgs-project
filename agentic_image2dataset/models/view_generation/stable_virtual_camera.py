@@ -3,6 +3,7 @@ Stable Virtual Camera model wrapper for generating novel views.
 """
 
 import glob
+import json
 import os
 import sys
 from pathlib import Path
@@ -17,7 +18,7 @@ if str(_stable_virtual_camera_path) not in sys.path:
 
 
 from demo import parse_task
-from seva.eval import create_transforms_simple, run_one_scene
+from seva.eval import run_one_scene
 from seva.model import SGMWrapper
 from seva.modules.autoencoder import AutoEncoder
 from seva.modules.conditioner import CLIPConditioner
@@ -25,6 +26,39 @@ from seva.sampling import DiscreteDenoiser
 from seva.utils import load_model
 
 from ..base import BaseProcessingModel
+
+
+def create_transforms_simple(save_path, img_paths, img_whs, c2ws, Ks):
+    import os.path as osp
+
+    out_frames = []
+    for img_path, img_wh, c2w, K in zip(img_paths, img_whs, c2ws, Ks):
+        # Ensure transform_matrix is 4x4 for nerfstudio compatibility
+        transform_matrix = c2w.tolist()
+        if len(transform_matrix) == 3:
+            # Add bottom row [0, 0, 0, 1] to make it a proper 4x4 homogeneous matrix
+            transform_matrix.append([0.0, 0.0, 0.0, 1.0])
+
+        out_frame = {
+            "fl_x": K[0][0].item(),
+            "fl_y": K[1][1].item(),
+            "cx": K[0][2].item(),
+            "cy": K[1][2].item(),
+            "w": img_wh[0].item(),
+            "h": img_wh[1].item(),
+            "file_path": f"./{osp.relpath(img_path, start=save_path)}"
+            if img_path is not None
+            else None,
+            "transform_matrix": transform_matrix,
+        }
+        out_frames.append(out_frame)
+    out = {
+        # "camera_model": "PINHOLE",
+        "orientation_override": "none",
+        "frames": out_frames,
+    }
+    with open(osp.join(save_path, "transforms.json"), "w") as of:
+        json.dump(out, of, indent=5)
 
 
 def process_scene(
