@@ -12,8 +12,6 @@ from agentic_image2dataset.models.image_edit import QwenImageEditModel
 from agentic_image2dataset.models.super_resolution import AdcSRModel, DiffBIRModel
 from agentic_image2dataset.models.view_generation import StableVirtualCameraModel
 from agentic_image2dataset.utils import (
-    analyze_image_quality,
-    detect_image_issues,
     fix_transforms,
 )
 
@@ -111,26 +109,14 @@ class AgenticPipeline:
                 self.agent_config, self.model_registry, workspace_root=workspace_dir
             )
 
-            # Step 1: Analyze input image
-            if self.config.verbose:
-                print("Analyzing input image...")
-
-            analysis = analyze_image_quality(workspace_input_image)
-            issues = detect_image_issues(workspace_input_image)
-
-            if self.config.verbose:
-                print(f"Image analysis: {analysis}")
-                if issues:
-                    print(f"Detected issues: {issues}")
-
-            # Step 2: Plan processing with agent
+            # Step 1: Plan processing with agent
             if self.config.verbose:
                 print("Planning processing pipeline...")
 
             # Agent decides its own output structure, but we instructed it to use 'output' dir
             agent_output_dir = workspace_dir / "output"
 
-            plan_result = agent.plan_processing(workspace_input_image)
+            plan_result = agent.plan_processing(input_image)
             if not plan_result["success"]:
                 return {
                     "success": False,
@@ -140,7 +126,7 @@ class AgenticPipeline:
             if self.config.verbose:
                 print(f"Processing plan: {plan_result['plan']}")
 
-            # Step 3: Execute processing
+            # Step 2: Execute processing
             if self.config.verbose:
                 print("Executing processing pipeline...")
 
@@ -154,7 +140,7 @@ class AgenticPipeline:
                     "error": f"Execution failed: {execution_result['result']}",
                 }
 
-            # Step 4: Post-processing and cleanup
+            # Step 3: Post-processing and cleanup
             # Check for transforms.json in the agent's output
             transforms_json = agent_output_dir / "transforms.json"
             if transforms_json.exists():
@@ -186,8 +172,6 @@ class AgenticPipeline:
             return {
                 "success": True,
                 "output_dir": output_dir,
-                "analysis": analysis,
-                "issues": issues,
                 "plan": plan_result["plan"],
                 "execution_result": execution_result["result"],
             }

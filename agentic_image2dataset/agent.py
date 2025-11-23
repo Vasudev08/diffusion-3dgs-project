@@ -8,6 +8,7 @@ import shutil
 from abc import ABCMeta
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import override
 
 from langchain.agents import AgentExecutor, create_openai_functions_agent
 from langchain.memory import ConversationBufferWindowMemory
@@ -126,6 +127,7 @@ class ImageAnalysisTool(BaseTool):
     def __init__(self, **kwargs: object):
         super().__init__(**kwargs)
 
+    @override
     def _run(self, image_path: Path, query: str = "") -> str:
         """Analyze the input image."""
         analysis = analyze_image_quality(image_path)
@@ -155,6 +157,7 @@ class ResourceRequirementTool(BaseTool):
     description: str = "Check if the system has enough VRAM to run a specific model on the given input. ALWAYS call this before executing a model."
     args_schema = ResourceRequirementToolArgs
 
+    @override
     def _run(self, model_name: str, input_path: str) -> str:
         """Check resource requirements."""
         from agentic_image2dataset.utils import get_system_resources
@@ -260,52 +263,6 @@ class ModelExecutionToolArgs(BaseModel):
     )
 
 
-class ModelExecutionTool(BaseTool):
-    """Tool for executing processing models."""
-
-    name: str = "execute_model"
-    description: str = "Execute a processing model on an image or directory. You MUST provide the 'input_path' parameter. The 'parameters' argument must be provided as a JSON string."
-    args_schema = ModelExecutionToolArgs
-    model_registry: ModelRegistry
-
-    def __init__(
-        self,
-        model_registry: ModelRegistry,
-        **kwargs: object,
-    ):
-        super().__init__(
-            model_registry=model_registry,
-            **kwargs,
-        )
-
-    def _run(
-        self, model_name: str, input_path: str, output_dir: str, parameters: str = "{}"
-    ) -> str:
-        """Execute a model with given parameters."""
-        model = self.model_registry.get(model_name)
-        if model is None:
-            return f"Model '{model_name}' not found. Available models: {self.model_registry.list_available()}"
-
-        # Parse parameters
-        try:
-            params: dict[str, object] = json.loads(parameters)
-        except json.JSONDecodeError:
-            return "Error: parameters must be a valid JSON string."
-
-        # Use provided input_path
-        actual_input_path = Path(input_path)
-        if not actual_input_path.exists():
-            return f"Error: Input path '{input_path}' does not exist."
-
-        # Execute the model
-        try:
-            results = model.process(actual_input_path, output_dir, **params)
-        except Exception as e:
-            return f"Failed to execute model '{model_name}': {str(e)}"
-
-        return f"Model '{model_name}' executed successfully. Generated {len(results)} outputs: {[str(p) for p in results]}"
-
-
 class FileOperationTool(BaseTool, metaclass=ABCMeta):
     """Base class for file operation tools with safety checks."""
 
@@ -327,6 +284,57 @@ class FileOperationTool(BaseTool, metaclass=ABCMeta):
             raise ValueError(f"Invalid path '{path_str}': {str(e)}")
 
 
+class ModelExecutionTool(FileOperationTool):
+    """Tool for executing processing models."""
+
+    name: str = "execute_model"
+    description: str = "Execute a processing model on an image or directory. You MUST provide the 'input_path' parameter. The 'parameters' argument must be provided as a JSON string."
+    args_schema = ModelExecutionToolArgs
+    model_registry: ModelRegistry
+
+    def __init__(
+        self,
+        model_registry: ModelRegistry,
+        workspace_root: Path,
+        **kwargs: object,
+    ):
+        super().__init__(
+            model_registry=model_registry,
+            workspace_root=workspace_root,
+            **kwargs,
+        )
+
+    @override
+    def _run(
+        self, model_name: str, input_path: str, output_dir: str, parameters: str = "{}"
+    ) -> str:
+        """Execute a model with given parameters."""
+        model = self.model_registry.get(model_name)
+        if model is None:
+            return f"Model '{model_name}' not found. Available models: {self.model_registry.list_available()}"
+
+        # Parse parameters
+        try:
+            params: dict[str, object] = json.loads(parameters)
+        except json.JSONDecodeError:
+            return "Error: parameters must be a valid JSON string."
+
+        # Use provided input_path
+        actual_input_path = self._validate_path(input_path)
+        if not actual_input_path.exists():
+            return f"Error: Input path '{input_path}' does not exist."
+
+        actual_output_path = self._validate_path(output_dir)
+
+        # Execute the model
+        try:
+            results = model.process(actual_input_path, actual_output_path, **params)
+        except Exception as e:
+            return f"Failed to execute model '{model_name}': {str(e)}"
+
+        return f"Model '{model_name}' executed successfully. Generated {len(results)} outputs: {[str(p) for p in results]}"
+
+
 class ListDirectoryTool(FileOperationTool):
     """Tool for listing files in a directory."""
 
@@ -340,6 +348,7 @@ class ListDirectoryTool(FileOperationTool):
 
     args_schema = Args
 
+    @override
     def _run(self, directory: str = ".") -> str:
         try:
             target_dir = self._validate_path(directory)
@@ -371,6 +380,7 @@ class CopyFileTool(FileOperationTool):
 
     args_schema = Args
 
+    @override
     def _run(self, source: str, destination: str) -> str:
         try:
             src_path = self._validate_path(source)
@@ -405,6 +415,7 @@ class MoveFileTool(FileOperationTool):
 
     args_schema = Args
 
+    @override
     def _run(self, source: str, destination: str) -> str:
         try:
             src_path = self._validate_path(source)
@@ -435,6 +446,7 @@ class DeleteFileTool(FileOperationTool):
 
     args_schema = Args
 
+    @override
     def _run(self, path: str) -> str:
         try:
             target_path = self._validate_path(path)
@@ -475,7 +487,7 @@ class AgenticImageProcessor:
         self.tools: list[BaseTool] = [
             ImageAnalysisTool(),
             ResourceRequirementTool(),
-            ModelExecutionTool(self.model_registry),
+            ModelExecutionTool(self.model_registry, workspace_root=workspace_root),
             ListDirectoryTool(workspace_root=workspace_root),
             CopyFileTool(workspace_root=workspace_root),
             MoveFileTool(workspace_root=workspace_root),

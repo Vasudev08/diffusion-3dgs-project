@@ -34,11 +34,9 @@ def main():
             device="cuda",
             num_views=24,
             super_resolution_factor=4,
-            colmap_quality="high",
         ),
         output_dir=Path("example_output"),
         input_image=Path("example_input.png"),
-        skip_colmap=False,
         verbose=True,
     )
 
@@ -60,9 +58,6 @@ def main():
     if result["success"]:
         print("✅ Processing completed successfully!")
         print(f"Output directory: {result['output_dir']}")
-
-        if result.get("issues"):
-            print(f"Issues detected: {', '.join(result['issues'])}")
     else:
         print(f"❌ Processing failed: {result['error']}")
 
