@@ -231,17 +231,14 @@ class ResourceRequirementTool(BaseTool):
 
         estimated_vram_gb = estimated_vram_mb / 1024
 
-        # Add a safety margin (e.g., 10%)
-        required_vram_gb = estimated_vram_gb * 1.1
-
         status_msg = (
             f"Model: {model_name}\n"
             f"Input: {input_path} ({width}x{height})\n"
-            f"Estimated VRAM: {estimated_vram_gb:.2f} GB (with safety margin: {required_vram_gb:.2f} GB)\n"
+            f"Estimated VRAM: {estimated_vram_gb:.2f} GB\n"
             f"Available VRAM: {available_vram_gb:.2f} GB (Total: {total_vram_gb:.2f} GB)\n"
         )
 
-        if available_vram_gb >= required_vram_gb:
+        if available_vram_gb >= estimated_vram_gb:
             return f"✅ Resources Sufficient.\n{status_msg}\nYou can proceed with execution."
         else:
             return f"❌ Insufficient Resources.\n{status_msg}\nWARNING: Execution may fail with OOM."
@@ -505,14 +502,14 @@ class AgenticImageProcessor:
                 model_guidance=[
                     ModelGuidance(
                         model_name="diffbir",
-                        guidance_text="Use 'diffbir' for maximum quality when computational resources allow",
+                        guidance_text="Primary choice for maximum quality. High VRAM usage.",
                     ),
                     ModelGuidance(
                         model_name="adcsr",
-                        guidance_text="Use 'adcsr' for faster processing with competitive quality",
+                        guidance_text="Fallback choice. Lower VRAM usage, faster processing, competitive quality.",
                     ),
                 ],
-                shared_notes="Both models support 4x upscaling by default. IMPORTANT: These models can process either a single image OR a directory containing multiple images. When applying super-resolution AFTER view generation, you should process the directory containing all generated views to upscale them all at once.",
+                shared_notes="Both models support 4x upscaling. If 'diffbir' fails the resource check, automatically use 'adcsr'. IMPORTANT: These models can process either a single image OR a directory containing multiple images. When applying super-resolution AFTER view generation, you should process the directory containing all generated views to upscale them all at once.",
             ),
             "image_editing": RoleConfiguration(
                 display_name="Image Editing Models",
@@ -601,7 +598,12 @@ Processing decisions should consider:
 - Optimal number of views for 3DGS training
 - Available computational resources and time constraints
 
-CRITICAL: Before executing any model, you MUST check if the system has enough VRAM using the 'check_resource_requirements' tool. If resources are insufficient, do NOT proceed with that model and consider alternatives or warn the user.
+CRITICAL RESOURCE MANAGEMENT:
+1. Before executing ANY model, you MUST check if the system has enough VRAM using the 'check_resource_requirements' tool.
+2. If the check returns "Insufficient Resources":
+   - You MUST automatically switch to a less resource-intensive model if one is available for the same task (e.g., switch from 'diffbir' to 'adcsr').
+   - Do NOT ask the user for permission to switch.
+   - Only stop and warn the user if NO alternative model is available.
 
 File Management Instructions:
 - You are responsible for managing your files within the workspace.
