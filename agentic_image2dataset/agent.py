@@ -5,11 +5,11 @@ LangChain agent for orchestrating the image processing pipeline.
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from langchain.agents import AgentExecutor, create_openai_functions_agent
-from langchain.memory import ConversationBufferWindowMemory
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain.agents import create_agent
 from langchain.tools import BaseTool
 from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import HumanMessage
+from langchain_core.runnables import Runnable
 
 from agentic_image2dataset.config import LLMConfig
 from agentic_image2dataset.models.base import ModelRegistry
@@ -147,13 +147,8 @@ class AgenticImageProcessor:
             DeleteFileTool(workspace_root=workspace_root),
         ]
 
-        # Create memory
-        self.memory: ConversationBufferWindowMemory = ConversationBufferWindowMemory(
-            memory_key="chat_history", return_messages=True, k=10
-        )
-
         # Create agent
-        self.agent: AgentExecutor = self._create_agent()
+        self.agent: Runnable = self._create_agent()
 
     def _get_role_configurations(self) -> dict[str, RoleConfiguration]:
         """Get structured configurations for each role."""
@@ -242,7 +237,7 @@ class AgenticImageProcessor:
             else "No models available."
         )
 
-    def _create_agent(self) -> AgentExecutor:
+    def _create_agent(self) -> Runnable:
         """Create the LangChain agent."""
 
         # Get available models and organize by role
@@ -291,28 +286,11 @@ File Management Instructions:
 
 Always explain your reasoning and provide clear feedback on the processing steps."""
 
-        # Create the prompt template
-        prompt = ChatPromptTemplate.from_messages(
-            [
-                ("system", system_prompt),
-                MessagesPlaceholder(variable_name="chat_history"),
-                ("human", "{input}"),
-                MessagesPlaceholder(variable_name="agent_scratchpad"),
-            ]
-        )
-
-        # Create the agent
-        agent = create_openai_functions_agent(
-            llm=self.llm, tools=self.tools, prompt=prompt
-        )
-
-        return AgentExecutor(
-            agent=agent,
+        # Create the agent using the new create_agent API
+        return create_agent(
+            model=self.llm,
             tools=self.tools,
-            memory=self.memory,
-            verbose=True,
-            handle_parsing_errors=True,
-            max_iterations=10,
+            system_prompt=system_prompt,
         )
 
     def plan_processing(self, image_path: Path) -> dict[str, str | bool]:
@@ -332,7 +310,7 @@ Consider:
 Provide a detailed plan with reasoning for each decision.
 """
 
-        response = self.agent.invoke({"input": planning_prompt})
+        response = self.agent.invoke({"messages": [HumanMessage(planning_prompt)]})
         return {"plan": response["output"], "success": True}
 
     def execute_plan(self, plan_description: str) -> dict[str, str | bool]:
@@ -350,5 +328,5 @@ Use the available tools to:
 Be systematic and check the results of each step before proceeding.
 """
 
-        response = self.agent.invoke({"input": execution_prompt})
+        response = self.agent.invoke({"messages": [HumanMessage(execution_prompt)]})
         return {"result": response["output"], "success": True}
