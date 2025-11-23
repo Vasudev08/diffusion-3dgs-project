@@ -9,7 +9,11 @@ from agentic_image2dataset.agent import AgenticImageProcessor
 from agentic_image2dataset.config import LLMConfig, PipelineConfig
 from agentic_image2dataset.models.base import ModelRegistry
 from agentic_image2dataset.models.image_edit import QwenImageEditModel
-from agentic_image2dataset.models.super_resolution import AdcSRModel, DiffBIRModel
+from agentic_image2dataset.models.super_resolution import (
+    AdcSRModel,
+    DiffBIRModel,
+    HYPIRModel,
+)
 from agentic_image2dataset.models.view_generation import StableVirtualCameraModel
 from agentic_image2dataset.utils import (
     fix_transforms,
@@ -43,6 +47,15 @@ class AgenticPipeline:
             create_stable_virtual_camera,
             role="view_generation",
         )
+
+        # Register HYPIR model factory
+        def create_hypir():
+            return HYPIRModel(
+                device=self.config.model.device,
+                scale=self.config.model.super_resolution_factor,
+            )
+
+        self.model_registry.register("hypir", create_hypir, role="super_resolution")
 
         # Register DiffBIR model factory
         def create_diffbir():
