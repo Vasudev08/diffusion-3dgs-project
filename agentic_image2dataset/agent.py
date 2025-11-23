@@ -118,27 +118,55 @@ class RoleConfiguration:
     shared_notes: str | None = None
 
 
-class ImageAnalysisTool(BaseTool):
+class FileOperationTool(BaseTool, metaclass=ABCMeta):
+    """Base class for file operation tools with safety checks."""
+
+    workspace_root: Path
+
+    def __init__(self, workspace_root: Path, **kwargs: object):
+        super().__init__(workspace_root=workspace_root, **kwargs)
+
+    def _validate_path(self, path_str: str) -> Path:
+        """Validate that the path is within the workspace."""
+        try:
+            path = (self.workspace_root / path_str).resolve()
+            if not str(path).startswith(str(self.workspace_root.resolve())):
+                raise ValueError(
+                    f"Access denied: Path '{path_str}' is outside the workspace."
+                )
+            return path
+        except Exception as e:
+            raise ValueError(f"Invalid path '{path_str}': {str(e)}")
+
+
+class ImageAnalysisTool(FileOperationTool):
     """Tool for analyzing input images."""
 
     name: str = "analyze_image"
     description: str = "Analyze an image to determine its quality, characteristics, and processing needs"
 
-    def __init__(self, **kwargs: object):
-        super().__init__(**kwargs)
+    def __init__(self, workspace_root: Path, **kwargs: object):
+        super().__init__(workspace_root=workspace_root, **kwargs)
 
     @override
-    def _run(self, image_path: Path, query: str = "") -> str:
+    def _run(self, image_path: str, query: str = "") -> str:
         """Analyze the input image."""
-        analysis = analyze_image_quality(image_path)
-        issues = detect_image_issues(image_path)
+        try:
+            actual_path = self._validate_path(image_path)
+            if not actual_path.exists():
+                return f"Error: Image path '{image_path}' does not exist."
 
-        result = {
-            "analysis": analysis,
-            "issues": issues,
-        }
+            analysis = analyze_image_quality(actual_path)
+            issues = detect_image_issues(actual_path)
 
-        return json.dumps(result, indent=2)
+            result = {
+                "analysis": analysis,
+                "issues": issues,
+            }
+
+            return json.dumps(result, indent=2)
+        except Exception as e:
+            return f"Error analyzing image: {str(e)}"
 
 
 class ResourceRequirementToolArgs(BaseModel):
@@ -150,14 +178,16 @@ class ResourceRequirementToolArgs(BaseModel):
     input_path: str = Field(description="The path to the input image or directory")
 
 
-class ResourceRequirementTool(BaseTool):
+class ResourceRequirementTool(FileOperationTool):
     """Tool for checking if a model can run with available resources."""
 
     name: str = "check_resource_requirements"
     description: str = "Check if the system has enough VRAM to run a specific model on the given input. ALWAYS call this before executing a model."
     args_schema = ResourceRequirementToolArgs
 
-    @override
+    def __init__(self, workspace_root: Path, **kwargs: object):
+        super().__init__(workspace_root=workspace_root, **kwargs)
+
     def _run(self, model_name: str, input_path: str) -> str:
         """Check resource requirements."""
         from agentic_image2dataset.utils import get_system_resources
@@ -180,7 +210,11 @@ class ResourceRequirementTool(BaseTool):
         model_profile = profiles[model_name]
 
         # Resolve input path
-        path_obj = Path(input_path)
+        try:
+            path_obj = self._validate_path(input_path)
+        except Exception as e:
+            return f"Error validating path: {str(e)}"
+
         if not path_obj.exists():
             return f"Error: Input path '{input_path}' does not exist."
 
@@ -261,27 +295,6 @@ class ModelExecutionToolArgs(BaseModel):
     output_dir: str = Field(
         description="Required: The output directory path to save the results. You must explicitly provide the path.",
     )
-
-
-class FileOperationTool(BaseTool, metaclass=ABCMeta):
-    """Base class for file operation tools with safety checks."""
-
-    workspace_root: Path
-
-    def __init__(self, workspace_root: Path, **kwargs: object):
-        super().__init__(workspace_root=workspace_root, **kwargs)
-
-    def _validate_path(self, path_str: str) -> Path:
-        """Validate that the path is within the workspace."""
-        try:
-            path = (self.workspace_root / path_str).resolve()
-            if not str(path).startswith(str(self.workspace_root.resolve())):
-                raise ValueError(
-                    f"Access denied: Path '{path_str}' is outside the workspace."
-                )
-            return path
-        except Exception as e:
-            raise ValueError(f"Invalid path '{path_str}': {str(e)}")
 
 
 class ModelExecutionTool(FileOperationTool):
@@ -485,8 +498,8 @@ class AgenticImageProcessor:
 
         # Create tools
         self.tools: list[BaseTool] = [
-            ImageAnalysisTool(),
-            ResourceRequirementTool(),
+            ImageAnalysisTool(workspace_root=workspace_root),
+            ResourceRequirementTool(workspace_root=workspace_root),
             ModelExecutionTool(self.model_registry, workspace_root=workspace_root),
             ListDirectoryTool(workspace_root=workspace_root),
             CopyFileTool(workspace_root=workspace_root),
