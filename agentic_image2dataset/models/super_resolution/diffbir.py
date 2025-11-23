@@ -5,10 +5,7 @@ DiffBIR model wrapper for super-resolution.
 import sys
 from pathlib import Path
 
-import numpy as np
-from PIL import Image
-
-from ..base import BaseProcessingModel, load_image
+from ..base import BaseProcessingModel
 
 # Add DiffBIR to path
 DIFFBIR_PATH = Path(__file__).parent.parent.parent.parent / "DiffBIR"
@@ -110,88 +107,47 @@ class DiffBIRModel(BaseProcessingModel):
 
         scale = scale or self.scale
 
-        # Check if input is a directory or a single file
+        # Update inference loop args
+        self.inference_loop.args.upscale = scale
+        self.inference_loop.args.input = str(image_path)
+        self.inference_loop.args.output = str(output_dir)
+
+        # Run DiffBIR inference (handles both single file and directory)
+        self.inference_loop.run()
+
+        # Collect and rename outputs
+        output_paths = []
+
         if image_path.is_dir():
-            # Process all images in the directory
-            image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff"}
-            image_files = [
+            # DiffBIR supports these extensions
+            image_extensions = {".jpg", ".jpeg", ".png"}
+            input_files = [
                 f
                 for f in image_path.iterdir()
                 if f.is_file() and f.suffix.lower() in image_extensions
             ]
-
-            if not image_files:
-                raise ValueError(f"No image files found in directory: {image_path}")
-
-            # Process each image
-            all_results = []
-            for img_file in image_files:
-                result = self._process_single_image(img_file, output_dir, scale)
-                all_results.append(result)
-
-            return all_results
         else:
-            # Process single image
-            return [self._process_single_image(image_path, output_dir, scale)]
+            input_files = [image_path]
 
-    def _process_single_image(
-        self, image_path: Path, output_dir: Path, scale: int
-    ) -> Path:
-        """Process a single image with DiffBIR.
+        for f in input_files:
+            # Expected output filename from DiffBIR (it uses the same stem with .png)
+            expected_output = output_dir / f"{f.stem}.png"
+            final_output = output_dir / f"sr_{f.stem}.png"
 
-        Args:
-            image_path: Path to the input image
-            output_dir: Directory to save the processed image
-            scale: Scale factor for super-resolution
+            if expected_output.exists():
+                # Rename to add prefix
+                expected_output.rename(final_output)
+                output_paths.append(final_output)
+            elif final_output.exists():
+                # Already renamed
+                output_paths.append(final_output)
+            elif not image_path.is_dir():
+                # If single file input and output missing, raise error
+                raise RuntimeError(
+                    f"DiffBIR did not produce output file: {expected_output}"
+                )
 
-        Returns:
-            Path to the generated super-resolution image
-        """
-        # Load the image
-        image = load_image(image_path)
-
-        # Convert numpy array to PIL Image
-        if image.dtype != np.uint8:
-            image = (image * 255).astype(np.uint8)
-        pil_image = Image.fromarray(image)
-
-        # Use DiffBIR for super-resolution
-        # Create temporary input and output directories for DiffBIR
-        temp_input_dir = output_dir / "temp_input"
-        temp_output_dir = output_dir / "temp_output"
-        temp_input_dir.mkdir(exist_ok=True)
-        temp_output_dir.mkdir(exist_ok=True)
-
-        # Save input image
-        temp_input_path = temp_input_dir / image_path.name
-        pil_image.save(temp_input_path)
-
-        # Update inference loop args for this specific scale
-        self.inference_loop.args.upscale = scale
-
-        # Run DiffBIR inference
-        self.inference_loop.args.input = str(temp_input_dir)
-        self.inference_loop.args.output = str(temp_output_dir)
-
-        # Process the image
-        self.inference_loop.run()
-
-        # Find the output file
-        output_files = list(temp_output_dir.glob("*"))
-        if not output_files:
-            raise RuntimeError("DiffBIR did not produce any output files")
-
-        # Move the result to the final location
-        final_output_path = output_dir / f"sr_{image_path.stem}.png"
-        _ = output_files[0].rename(final_output_path)
-
-        # Clean up temporary directories
-        import shutil
-
-        shutil.rmtree(temp_input_dir)
-        shutil.rmtree(temp_output_dir)
-
-        return final_output_path
+        return output_paths
 
     def get_description(self) -> str:
         """Get model description."""
