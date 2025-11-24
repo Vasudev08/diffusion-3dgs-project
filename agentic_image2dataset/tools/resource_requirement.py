@@ -113,6 +113,6 @@ class ResourceRequirementTool(FileOperationTool):
         )
 
         if available_vram_gb >= estimated_vram_gb:
-            return f"✅ Resources Sufficient.\n{status_msg}\nYou can proceed with execution."
+            return f"✅ Resources Sufficient.\n{status_msg}"
         else:
-            return f"❌ Insufficient Resources.\n{status_msg}\nWARNING: Execution may fail with OOM."
+            return f"❌ Insufficient Resources.\n{status_msg}"

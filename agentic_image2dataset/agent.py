@@ -8,7 +8,7 @@ from pathlib import Path
 from langchain.agents import create_agent
 from langchain.tools import BaseTool
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import Runnable
 
 from agentic_image2dataset.config import LLMConfig
@@ -303,19 +303,65 @@ Always explain your reasoning and provide clear feedback on the processing steps
         planning_prompt = f"""
 Analyze the input image at {image_path} and create a processing plan.
 
-First, use the analyze_image tool to understand the image characteristics.
-Then, based on the analysis, decide which models to use and in what order.
+CRITICAL PLANNING CONSTRAINTS:
+1. DO NOT execute ANY models during this planning phase. Only use analysis tools (analyze_image, check_resource_requirements, list_directory).
+2. You MUST reason step-by-step before describing your plan. Walk through your thought process explicitly.
 
-Consider:
-1. Should we apply super-resolution before, after view generation, or both?
-2. How many views should we generate?
-3. What parameters should we use for each model?
+STEP-BY-STEP REASONING PROCESS:
+1. First, use the analyze_image tool to understand the image characteristics.
+2. Then, reason through the following questions one by one:
+   a. What are the image's current resolution, quality, and characteristics?
+   b. What processing transformations are needed to create a good 3DGS dataset?
+   c. Should we apply super-resolution before view generation, after, or both? Why?
+   d. Which specific models should we use, considering resource requirements?
+   e. How many views should we generate and why?
+   f. What parameters should we use for each model and why?
+   g. What is the complete sequence of operations?
 
-Provide a detailed plan with reasoning for each decision.
+3. After reasoning through each question, provide a detailed plan that includes:
+   - The complete processing pipeline (ordered list of operations)
+   - Model choices with justifications
+   - Parameter selections with rationales
+   - Expected intermediate and final outputs
+
+Remember: This is PLANNING ONLY. Do not execute any models. Save execution for the execute_plan phase.
 """
 
-        response = self.agent.invoke({"messages": [HumanMessage(planning_prompt)]})
-        return {"plan": response["output"], "success": True}
+        response: AIMessage = self.agent.invoke(
+            {"messages": [HumanMessage(planning_prompt)]}
+        )
+        return {"plan": response["messages"][-1].text, "success": True}
+
+    def summarize_plan(self, verbose_plan: str) -> dict[str, str | bool]:
+        """Summarize a verbose plan into concise, actionable execution steps.
+
+        Args:
+            verbose_plan: The detailed plan with reasoning from plan_processing
+
+        Returns:
+            Dictionary containing the summarized plan and success status
+        """
+        summarization_prompt = f"""
+Given the following detailed processing plan, create a concise, structured summary that contains ONLY the actionable steps needed for execution.
+
+DETAILED PLAN:
+{verbose_plan}
+
+Please provide a numbered list of execution steps that includes:
+1. Which models to use (exact model names)
+2. The order of operations
+3. Required parameters for each model
+4. Input/output file paths
+5. Any resource checks needed
+
+Remove all reasoning, explanations, and analysis. Keep only the concrete actions to execute.
+Format as a clear, numbered list of steps.
+"""
+
+        response: AIMessage = self.agent.invoke(
+            {"messages": [HumanMessage(summarization_prompt)]}
+        )
+        return {"summary": response["messages"][-1].text, "success": True}
 
     def execute_plan(self, plan_description: str) -> dict[str, str | bool]:
         """Execute the processing plan."""
@@ -332,5 +378,7 @@ Use the available tools to:
 Be systematic and check the results of each step before proceeding.
 """
 
-        response = self.agent.invoke({"messages": [HumanMessage(execution_prompt)]})
-        return {"result": response["output"], "success": True}
+        response: AIMessage = self.agent.invoke(
+            {"messages": [HumanMessage(execution_prompt)]}
+        )
+        return {"result": response["messages"][-1].text, "success": True}

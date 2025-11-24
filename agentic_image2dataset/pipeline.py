@@ -139,14 +139,32 @@ class AgenticPipeline:
             if self.config.verbose:
                 print(f"Processing plan: {plan_result['plan']}")
 
-            # Step 2: Execute processing
+            # Step 2: Summarize plan
             if self.config.verbose:
-                print("Executing processing pipeline...")
+                print("Summarizing plan into actionable steps...")
 
             plan_description = plan_result["plan"]
             if not isinstance(plan_description, str):
                 plan_description = str(plan_description)
-            execution_result = agent.execute_plan(plan_description)
+
+            summary_result = agent.summarize_plan(plan_description)
+            if not summary_result["success"]:
+                return {
+                    "success": False,
+                    "error": f"Summarization failed: {summary_result['summary']}",
+                }
+
+            if self.config.verbose:
+                print(f"Summarized plan: {summary_result['summary']}")
+
+            # Step 3: Execute processing
+            if self.config.verbose:
+                print("Executing processing pipeline...")
+
+            execution_plan = summary_result["summary"]
+            if not isinstance(execution_plan, str):
+                execution_plan = str(execution_plan)
+            execution_result = agent.execute_plan(execution_plan)
             if not execution_result["success"]:
                 return {
                     "success": False,
