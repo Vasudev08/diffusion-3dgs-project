@@ -76,7 +76,7 @@ patch_huggingface_models()
 # ============================================================================
 
 # Add project root to python path
-sys.path.append(str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent))
 
 from agentic_image2dataset import (
     AgenticPipeline,
@@ -84,22 +84,31 @@ from agentic_image2dataset import (
     LLMConfig,
     ModelConfig,
 )
+import argparse
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Colab Agentic 3DGS Pipeline")
+    parser.add_argument("--input_image", type=Path, help="Path to input image")
+    parser.add_argument("--output_dir", type=Path, default=Path("output_dataset_colab"), help="Output directory")
+    return parser.parse_args()
 
 def get_input_image_colab():
     """Upload image using Colab's file upload."""
     if not IN_COLAB:
-        return Path("example_input.png") # Fallback
+        return None
     
     print("\nPlease upload your input image:")
-    uploaded = files.upload()
-    
-    if not uploaded:
-        print("No file uploaded.")
+    try:
+        uploaded = files.upload()
+        if not uploaded:
+            print("No file uploaded.")
+            return None
+        # Get the first uploaded filename
+        filename = next(iter(uploaded))
+        return Path(filename)
+    except Exception as e:
+        print(f"Upload failed: {e}")
         return None
-        
-    # Get the first uploaded filename
-    filename = next(iter(uploaded))
-    return Path(filename)
 
 def zip_and_download(directory: Path):
     """Zip the output directory and trigger download."""
@@ -112,18 +121,27 @@ def zip_and_download(directory: Path):
     zip_path = f"{directory}.zip"
     
     print(f"Downloading {zip_path}...")
-    files.download(zip_path)
+    try:
+        files.download(zip_path)
+    except Exception as e:
+        print(f"Download failed: {e}")
 
 def main():
     print("=== Google Colab Agentic 3DGS Pipeline ===")
     
+    args = parse_args()
+
     # 1. Setup API Key
     if "GOOGLE_API_KEY" not in os.environ:
-        print("\nGoogle API Key not found. Please enter it below:")
+        # Try to get from args or colab userdata first
         try:
             from google.colab import userdata
             os.environ["GOOGLE_API_KEY"] = userdata.get('GOOGLE_API_KEY')
         except:
+            pass
+            
+        if "GOOGLE_API_KEY" not in os.environ:
+            print("\nGoogle API Key not found.")
             api_key = input("Enter GOOGLE_API_KEY: ").strip()
             if api_key:
                 os.environ["GOOGLE_API_KEY"] = api_key
@@ -132,12 +150,24 @@ def main():
                 return
 
     # 2. Get Input
-    input_image = get_input_image_colab()
+    input_image = args.input_image
+    
+    # If not provided via args, try Colab upload or fallback
     if not input_image:
+        # Check if default example exists and use it if no upload is possible
+        if Path("example_input.png").exists():
+             print("Using default example_input.png")
+             input_image = Path("example_input.png")
+        else:
+             # Try upload as last resort (might fail in subprocess)
+             input_image = get_input_image_colab()
+
+    if not input_image or not input_image.exists():
+        print(f"Error: Input image '{input_image}' not found.")
         return
     
     # 3. Configure Pipeline
-    output_dir = Path("output_dataset_colab")
+    output_dir = args.output_dir
     
     # Colab usually has a T4 GPU, so we can use decent settings
     print("\nConfiguration:")
@@ -167,8 +197,6 @@ def main():
     result = pipeline.process(
         input_image=config.input_image,
         output_dir=config.output_dir,
-        num_views=config.model.num_views,
-        skip_colmap=config.skip_colmap,
     )
 
     if result["success"]:
