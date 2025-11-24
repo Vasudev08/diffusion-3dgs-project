@@ -297,6 +297,7 @@ class StableVirtualCameraModel(BaseProcessingModel):
 
         # Build version_dict with explicit parameters
         options = {
+            "replace_or_include_input": True,
             "chunk_strategy": chunk_strategy,
             "video_save_fps": video_save_fps,
             "beta_linear_start": 5e-6,
