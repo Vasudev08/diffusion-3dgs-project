@@ -18,6 +18,7 @@ from agentic_image2dataset.models.view_generation import StableVirtualCameraMode
 from agentic_image2dataset.utils import (
     fix_transforms,
 )
+from agentic_image2dataset.utils.download import download_weights
 
 
 class AgenticPipeline:
@@ -26,6 +27,9 @@ class AgenticPipeline:
     def __init__(self, config: PipelineConfig):
         self.config: PipelineConfig = config
         self.model_registry: ModelRegistry = ModelRegistry()
+
+        # Download weights if needed
+        download_weights(Path("weights"))
 
         # Initialize models
         self._initialize_models()

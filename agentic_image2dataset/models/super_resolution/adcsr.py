@@ -34,7 +34,7 @@ class AdcSRModel(BaseProcessingModel):
         self.scale: int = scale
         self.device: str = device
         self.epoch: int = epoch
-        self.model_dir: Path = Path(model_dir) if model_dir else ADCSR_PATH / "weight"
+        self.model_dir: Path = Path("weights")
         self._model: torch.nn.Module | None = None  # Lazy initialization
 
     @property
@@ -76,9 +76,9 @@ class AdcSRModel(BaseProcessingModel):
 
         ckpt_halfdecoder = torch.load(
             str(halfdecoder_path), weights_only=False, map_location=device
-        )  # type: ignore
+        )
 
-        decoder = Decoder(  # type: ignore
+        decoder = Decoder(
             in_channels=4,
             out_channels=3,
             up_block_types=tuple(["UpDecoderBlock2D" for _ in range(4)]),
@@ -96,7 +96,7 @@ class AdcSRModel(BaseProcessingModel):
                 new_k = k.replace("decoder.", "")
                 decoder_ckpt[new_k] = v
 
-        decoder.load_state_dict(decoder_ckpt, strict=True)  # type: ignore
+        decoder.load_state_dict(decoder_ckpt, strict=True)
 
         # Load main model
         model_path = self.model_dir / f"net_params_{self.epoch}.pkl"

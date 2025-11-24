@@ -23,7 +23,7 @@ class HYPIRModel(BaseProcessingModel):
         coeff_t: int = 200,
         lora_rank: int = 256,
         lora_modules: list[str] | None = None,
-        weight_path: str | Path | None = None,
+        weight_path: str | Path = Path("weights/HYPIR_sd2.pth"),
         patch_size: int = 512,
         stride: int = 256,
         upscale: int = 4,
@@ -51,7 +51,7 @@ class HYPIRModel(BaseProcessingModel):
             "ff.net.2",
             "ff.net.0.proj",
         ]
-        self.weight_path = Path("weights/HYPIR_sd2.pth")
+        self.weight_path = weight_path
         self.patch_size = patch_size
         self.stride = stride
         self.upscale = upscale
