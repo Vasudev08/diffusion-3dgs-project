@@ -271,7 +271,7 @@ def fix_transforms(transforms_path: Path) -> None:
         scale_y = actual_h / orig_h
 
         # Update file_path to be relative path from transforms.json to the image
-        relative_path = f"images/{image_path.name}"
+        relative_path = f"./images/{image_path.name}"
         new_frame["file_path"] = relative_path
 
         # Update dimensions
