@@ -189,6 +189,7 @@ def detect_image_issues(image_path: Path) -> list[str]:
 def fix_transforms(transforms_path: Path) -> None:
     """
     Fix transforms.json by resizing and scaling intrinsics based on actual image dimensions.
+    File paths are updated to use relative paths from the "images" directory after sorting.
 
     Args:
         transforms_path: Path to the transforms.json file
@@ -207,31 +208,34 @@ def fix_transforms(transforms_path: Path) -> None:
         return
 
     transforms_dir = transforms_path.parent
+    images_dir = transforms_dir / "images"
+
+    if not images_dir.exists():
+        print(f"Warning: Images directory not found at {images_dir}")
+        return
+
+    # Find all image files in the images directory and sort them
+    image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif"}
+    image_files = []
+    for ext in image_extensions:
+        image_files.extend(images_dir.glob(f"*{ext}"))
+        image_files.extend(images_dir.glob(f"*{ext.upper()}"))
+
+    # Sort the image files alphabetically by name
+    image_files = sorted(image_files, key=lambda p: p.name)
+
+    if len(image_files) != len(data["frames"]):
+        print(
+            f"Warning: Number of images ({len(image_files)}) does not match "
+            f"number of frames ({len(data['frames'])})"
+        )
+
     new_frames = []
     modified_count = 0
 
-    for frame in data["frames"]:
+    # Process each frame using the sorted image files
+    for idx, (frame, image_path) in enumerate(zip(data["frames"], image_files)):
         new_frame = frame.copy()
-
-        # Resolve image path
-        file_path = frame.get("file_path")
-        if not file_path:
-            print("Warning: Frame missing file_path, skipping.")
-            new_frames.append(new_frame)
-            continue
-
-        # Handle relative paths
-        image_path = transforms_dir / file_path
-        if not image_path.exists():
-            # Try checking if file_path is absolute or relative to cwd (fallback)
-            image_path = Path(file_path)
-
-        if not image_path.exists():
-            print(
-                f"Warning: Image not found at {image_path}, skipping dimension update."
-            )
-            new_frames.append(new_frame)
-            continue
 
         # Read image to get actual dimensions
         # We read only the header if possible, but cv2.imread loads the whole image.
@@ -259,12 +263,16 @@ def fix_transforms(transforms_path: Path) -> None:
         orig_h = current_cy * 2
 
         if orig_w == 0 or orig_h == 0:
-            print(f"Warning: Invalid inferred dimensions for {file_path}, skipping.")
+            print(f"Warning: Invalid inferred dimensions for frame {idx}, skipping.")
             new_frames.append(new_frame)
             continue
 
         scale_x = actual_w / orig_w
         scale_y = actual_h / orig_h
+
+        # Update file_path to be relative path from transforms.json to the image
+        relative_path = f"images/{image_path.name}"
+        new_frame["file_path"] = relative_path
 
         # Update dimensions
         new_frame["w"] = actual_w
