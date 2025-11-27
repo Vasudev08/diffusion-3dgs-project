@@ -66,9 +66,7 @@ openai = [
 anthropic = [
     "langchain-anthropic>=0.1.0",
 ]
-nano_banana = [
-    "google-generativeai>=0.8.0",
-]
+
 all = [
     "langchain-google-genai>=1.0.0",
     "langchain-openai>=0.1.0",
