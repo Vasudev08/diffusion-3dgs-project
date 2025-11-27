@@ -20,6 +20,7 @@ from agentic_image2dataset.tools import (
     ListDirectoryTool,
     ModelExecutionTool,
     MoveFileTool,
+    NanoBananaTool,
     ResourceRequirementTool,
 )
 
@@ -145,6 +146,7 @@ class AgenticImageProcessor:
             CopyFileTool(workspace_root=workspace_root),
             MoveFileTool(workspace_root=workspace_root),
             DeleteFileTool(workspace_root=workspace_root),
+            NanoBananaTool(workspace_root=workspace_root),
         ]
 
         # Create agent
@@ -262,12 +264,23 @@ Available processing models:
 {models_text}
 
 
+
 Processing decisions should consider:
 - Image resolution and quality
 - Scene complexity and content
 - Blur, brightness, and contrast issues
 - Optimal number of views for 3DGS training
 - Available computational resources and time constraints
+
+PREPROCESSING INSTRUCTIONS:
+- You have access to a powerful preprocessing tool called 'nano_banana_preprocess'.
+- This tool uses Gemini 3 Pro to isolate objects on a white background, sharpen details, and fix aspect ratios.
+- You MUST ALWAYS use 'nano_banana_preprocess' as the FIRST step in your processing pipeline, regardless of the input image quality.
+- After preprocessing, use the output image (e.g., 'processed_<filename>.png') as the input for all subsequent steps (like view generation).
+- The preprocessed image will have:
+  - A clean white background
+  - Enhanced sharpness and texture details
+  - A 1:1 aspect ratio optimized for Stable Virtual Camera
 
 CRITICAL RESOURCE MANAGEMENT:
 1. Before executing ANY model, you MUST check if the system has enough VRAM using the 'check_resource_requirements' tool.

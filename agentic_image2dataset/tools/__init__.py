@@ -7,6 +7,7 @@ from agentic_image2dataset.tools.file_system import (
 )
 from agentic_image2dataset.tools.image_analysis import ImageAnalysisTool
 from agentic_image2dataset.tools.model_execution import ModelExecutionTool
+from agentic_image2dataset.tools.nano_banana_tool import NanoBananaTool
 from agentic_image2dataset.tools.resource_requirement import ResourceRequirementTool
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "CopyFileTool",
     "MoveFileTool",
     "DeleteFileTool",
+    "NanoBananaTool",
 ]
