@@ -1,10 +1,9 @@
-
 from pathlib import Path
 from typing import Type
+import subprocess
 
 from langchain.tools import BaseTool
 from pydantic import BaseModel, Field
-import google.generativeai as genai
 import os
 
 class NanoBananaToolInput(BaseModel):
@@ -17,65 +16,45 @@ class NanoBananaTool(BaseTool):
     workspace_root: Path = Field(default_factory=Path.cwd)
 
     def _run(self, image_path: str) -> str:
-        """Use the tool."""
+        """Use the tool by calling standalone script in separate venv."""
         try:
-            # 1. Setup API Key (ensure it's in env)
+            # 1. Check API Key
             if "NANO_API_KEY" not in os.environ:
                 return "Error: NANO_API_KEY environment variable not found."
 
-            genai.configure(api_key=os.environ["NANO_API_KEY"])
-
-            # 2. Resolve path
+            # 2. Resolve paths
             input_path = self.workspace_root / image_path
             if not input_path.exists():
                 return f"Error: Input file not found at {input_path}"
-
-            # 3. Configuration for 'Gemini 3 Pro Image' (using the preview model as requested)
-            # Note: Using the model name provided by user, but falling back if needed might be good later.
-            # For now, we stick to the user's requested model name.
-            model = genai.GenerativeModel('gemini-3-pro-image-preview')
             
-            # 4. Upload file
-            print(f"Uploading {input_path} to Gemini...")
-            sample_file = genai.upload_file(str(input_path))
-            
-            # 5. The Magic Prompt
-            prompt = "Isolate this object on a purely solid white background. Sharpen details. High quality texture."
-            
-            # 6. Generate/Edit
-            print("Sending request to Nano Banana Pro...")
-            # Note: The standard SDK uses generate_content for Gemini models.
-            # 'generate_images' is likely from a different SDK or hypothetical.
-            # We will try generate_content with the prompt and image.
-            response = model.generate_content([prompt, sample_file])
-            
-            # 7. Save the result
             output_filename = f"processed_{input_path.stem}.png"
             output_path = self.workspace_root / output_filename
             
-            saved_image = False
-            text_response = []
-
-            if response.parts:
-                for part in response.parts:
-                    # Check for text
-                    if hasattr(part, "text") and part.text:
-                        text_response.append(part.text)
-                    
-                    # Check for inline_data (Image)
-                    if hasattr(part, "inline_data") and part.inline_data:
-                        print(f"Received inline data with mime_type: {part.inline_data.mime_type}")
-                        # We assume it's an image. Save it.
-                        with open(output_path, "wb") as f:
-                            f.write(part.inline_data.data)
-                        saved_image = True
+            # 3. Find the standalone script and venv in sub-project
+            project_root = Path(__file__).parent.parent.parent
+            nano_service_dir = project_root / "nano_banana_service"
+            standalone_script = nano_service_dir / "nano_banana_standalone.py"
+            nano_venv_python = nano_service_dir / ".venv" / "bin" / "python"
             
-            if saved_image:
-                return f"Successfully processed image. Saved to: {output_filename}. Text note: {' '.join(text_response)}"
-            elif text_response:
-                return f"Model returned text only: {' '.join(text_response)}"
+            if not standalone_script.exists():
+                return f"Error: Standalone script not found at {standalone_script}"
+            
+            if not nano_venv_python.exists():
+                return f"Error: Nano Banana venv not found. Run: cd nano_banana_service && uv sync"
+            
+            # 4. Call the standalone script in the separate venv
+            print(f"Calling Nano Banana in separate venv...")
+            result = subprocess.run(
+                [str(nano_venv_python), str(standalone_script), str(input_path), str(output_path)],
+                capture_output=True,
+                text=True,
+                env=os.environ.copy()
+            )
+            
+            if result.returncode == 0:
+                return f"Successfully processed image. Saved to: {output_filename}"
             else:
-                return "Error: Model returned no content (no text or inline_data)."
+                return f"Error: Nano Banana script failed:\n{result.stdout}\n{result.stderr}"
 
         except Exception as e:
             return f"Error processing image with Nano Banana: {str(e)}"
