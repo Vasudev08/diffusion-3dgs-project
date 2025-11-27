@@ -59,7 +59,7 @@ dependencies = [
 
 [project.optional-dependencies]
 google = [
-    "langchain-google-genai>=3.0.0",
+    "langchain-google-genai>=2.0.0,<3.0.0",
 ]
 openai = [
     "langchain-openai>=0.1.0",
@@ -68,7 +68,7 @@ anthropic = [
     "langchain-anthropic>=0.1.0",
 ]
 all = [
-    "langchain-google-genai>=1.0.0",
+    "langchain-google-genai>=2.0.0,<3.0.0",
     "langchain-openai>=0.1.0",
     "langchain-anthropic>=0.1.0",
 ]
