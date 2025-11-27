@@ -54,7 +54,7 @@ dependencies = [
     "sdnq",
     "vision-aided-loss",
     "tenacity",
-    "google-generativeai>=0.8.0",
+    "google-generativeai",
 ]
 
 [project.optional-dependencies]
