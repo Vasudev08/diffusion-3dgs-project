@@ -54,7 +54,6 @@ dependencies = [
     "sdnq",
     "vision-aided-loss",
     "tenacity",
-    "google-generativeai",
 ]
 
 [project.optional-dependencies]
@@ -66,6 +65,9 @@ openai = [
 ]
 anthropic = [
     "langchain-anthropic>=0.1.0",
+]
+nano_banana = [
+    "google-generativeai>=0.8.0",
 ]
 all = [
     "langchain-google-genai>=2.0.0,<3.0.0",
