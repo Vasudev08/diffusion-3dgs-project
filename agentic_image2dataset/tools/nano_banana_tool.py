@@ -1,10 +1,12 @@
 from pathlib import Path
 from typing import Type
-import subprocess
+import requests
+import json
+import base64
+import os
 
 from langchain.tools import BaseTool
 from pydantic import BaseModel, Field
-import os
 
 class NanoBananaToolInput(BaseModel):
     image_path: str = Field(description="Path to the input image file to be processed")
@@ -16,10 +18,11 @@ class NanoBananaTool(BaseTool):
     workspace_root: Path = Field(default_factory=Path.cwd)
 
     def _run(self, image_path: str) -> str:
-        """Use the tool by calling standalone script in separate venv."""
+        """Use the tool via direct REST API (No SDK required)."""
         try:
             # 1. Check API Key
-            if "NANO_API_KEY" not in os.environ:
+            api_key = os.environ.get("NANO_API_KEY")
+            if not api_key:
                 return "Error: NANO_API_KEY environment variable not found."
 
             # 2. Resolve paths
@@ -30,31 +33,55 @@ class NanoBananaTool(BaseTool):
             output_filename = f"processed_{input_path.stem}.png"
             output_path = self.workspace_root / output_filename
             
-            # 3. Find the standalone script and venv in sub-project
-            project_root = Path(__file__).parent.parent.parent
-            nano_service_dir = project_root / "nano_banana_service"
-            standalone_script = nano_service_dir / "nano_banana_standalone.py"
-            nano_venv_python = nano_service_dir / ".venv" / "bin" / "python"
+            print(f"Processing {input_path.name} with Nano Banana (REST API)...")
+
+            # 3. Prepare API Request
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key={api_key}"
             
-            if not standalone_script.exists():
-                return f"Error: Standalone script not found at {standalone_script}"
+            # Read and Encode Image
+            with open(input_path, "rb") as f:
+                image_data = base64.b64encode(f.read()).decode("utf-8")
             
-            if not nano_venv_python.exists():
-                return f"Error: Nano Banana venv not found. Run: cd nano_banana_service && uv sync"
+            # Construct JSON Payload
+            payload = {
+                "contents": [{
+                    "parts": [
+                        {"text": "Isolate this object on a purely solid white background. Sharpen details. High quality texture."},
+                        {
+                            "inline_data": {
+                                "mime_type": "image/jpeg", # Assuming JPEG/PNG input, API is flexible
+                                "data": image_data
+                            }
+                        }
+                    ]
+                }]
+            }
             
-            # 4. Call the standalone script in the separate venv
-            print(f"Calling Nano Banana in separate venv...")
-            result = subprocess.run(
-                [str(nano_venv_python), str(standalone_script), str(input_path), str(output_path)],
-                capture_output=True,
-                text=True,
-                env=os.environ.copy()
-            )
+            # 4. Send Request
+            headers = {'Content-Type': 'application/json'}
+            response = requests.post(url, headers=headers, data=json.dumps(payload))
             
-            if result.returncode == 0:
-                return f"Successfully processed image. Saved to: {output_filename}"
-            else:
-                return f"Error: Nano Banana script failed:\n{result.stdout}\n{result.stderr}"
+            if response.status_code != 200:
+                return f"Error from Gemini API: {response.text}"
+                
+            # 5. Parse Response (Extract Image)
+            try:
+                result = response.json()
+                candidates = result.get("candidates", [])
+                if candidates:
+                    parts = candidates[0].get("content", {}).get("parts", [])
+                    for part in parts:
+                        if "inline_data" in part:
+                            b64_data = part["inline_data"]["data"]
+                            with open(output_path, "wb") as f:
+                                f.write(base64.b64decode(b64_data))
+                            return f"Successfully processed image. Saved to: {output_filename}"
+                            
+                # Fallback if no image returned
+                return f"Model returned no image. Full response: {result}"
+                
+            except Exception as e:
+                return f"Error parsing API response: {str(e)}"
 
         except Exception as e:
             return f"Error processing image with Nano Banana: {str(e)}"
