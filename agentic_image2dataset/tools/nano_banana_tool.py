@@ -71,11 +71,20 @@ class NanoBananaTool(BaseTool):
                 if candidates:
                     parts = candidates[0].get("content", {}).get("parts", [])
                     for part in parts:
-                        if "inline_data" in part:
-                            b64_data = part["inline_data"]["data"]
-                            with open(output_path, "wb") as f:
-                                f.write(base64.b64decode(b64_data))
-                            return f"Successfully processed image. Saved to: {output_filename}"
+                        # API can return 'inline_data' (snake_case) or 'inlineData' (camelCase)
+                        inline_data = part.get("inline_data") or part.get("inlineData")
+                        
+                        if inline_data:
+                            # Handle both dictionary access and object access patterns if needed
+                            if isinstance(inline_data, dict):
+                                b64_data = inline_data.get("data")
+                            else:
+                                b64_data = inline_data.data
+                                
+                            if b64_data:
+                                with open(output_path, "wb") as f:
+                                    f.write(base64.b64decode(b64_data))
+                                return f"Successfully processed image. Saved to: {output_filename}"
                             
                 # Fallback if no image returned
                 # CRITICAL: Do NOT return the full result if it's huge (e.g. contains base64), 
