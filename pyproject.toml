@@ -54,6 +54,7 @@ dependencies = [
     "sdnq",
     "vision-aided-loss",
     "tenacity",
+    "requests",
 ]
 
 [project.optional-dependencies]
