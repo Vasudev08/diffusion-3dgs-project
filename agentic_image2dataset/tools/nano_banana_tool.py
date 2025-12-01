@@ -78,7 +78,19 @@ class NanoBananaTool(BaseTool):
                             return f"Successfully processed image. Saved to: {output_filename}"
                             
                 # Fallback if no image returned
-                return f"Model returned no image. Full response: {result}"
+                # CRITICAL: Do NOT return the full result if it's huge (e.g. contains base64), 
+                # as it will crash the Agent's context window.
+                result_str = str(result)
+                if len(result_str) > 1000:
+                    result_str = result_str[:1000] + "... (truncated)"
+                
+                print(f"DEBUG: Failed to find inline_data. Response keys: {result.keys()}")
+                if candidates:
+                    print(f"DEBUG: Candidate keys: {candidates[0].keys()}")
+                    if "content" in candidates[0]:
+                        print(f"DEBUG: Content keys: {candidates[0]['content'].keys()}")
+                
+                return f"Model returned no image. Response summary: {result_str}"
                 
             except Exception as e:
                 return f"Error parsing API response: {str(e)}"
