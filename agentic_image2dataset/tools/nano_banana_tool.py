@@ -89,6 +89,8 @@ class NanoBananaTool(BaseTool):
                     print(f"DEBUG: Candidate keys: {candidates[0].keys()}")
                     if "content" in candidates[0]:
                         print(f"DEBUG: Content keys: {candidates[0]['content'].keys()}")
+                        parts = candidates[0]['content'].get('parts', [])
+                        print(f"DEBUG: Parts content (truncated): {str(parts)[:500]}")
                 
                 return f"Model returned no image. Response summary: {result_str}"
                 
