@@ -1,9 +1,9 @@
 from pathlib import Path
 from typing import Type
-import requests
-import json
-import base64
 import os
+
+from google import genai
+from google.genai import types
 
 from langchain.tools import BaseTool
 from pydantic import BaseModel, Field
@@ -18,7 +18,7 @@ class NanoBananaTool(BaseTool):
     workspace_root: Path = Field(default_factory=Path.cwd)
 
     def _run(self, image_path: str) -> str:
-        """Use the tool via direct REST API (No SDK required)."""
+        """Use the tool via google-genai SDK with inline image data."""
         try:
             # 1. Check API Key
             api_key = os.environ.get("NANO_API_KEY")
@@ -33,78 +33,40 @@ class NanoBananaTool(BaseTool):
             output_filename = f"processed_{input_path.stem}.png"
             output_path = self.workspace_root / output_filename
             
-            print(f"Processing {input_path.name} with Nano Banana (REST API)...")
+            print(f"Processing {input_path.name} with Nano Banana (SDK/Inline)...")
 
-            # 3. Prepare API Request
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key={api_key}"
+            # 3. Initialize Client
+            client = genai.Client(api_key=api_key)
             
-            # Read and Encode Image
-            with open(input_path, "rb") as f:
-                image_data = base64.b64encode(f.read()).decode("utf-8")
-            
-            # Construct JSON Payload
-            payload = {
-                "contents": [{
-                    "parts": [
-                        {"text": "Isolate this object on a purely solid white background. Sharpen details. High quality texture."},
-                        {
-                            "inline_data": {
-                                "mime_type": "image/jpeg", # Assuming JPEG/PNG input, API is flexible
-                                "data": image_data
-                            }
-                        }
-                    ]
-                }]
-            }
-            
-            # 4. Send Request
-            headers = {'Content-Type': 'application/json'}
-            response = requests.post(url, headers=headers, data=json.dumps(payload))
-            
-            if response.status_code != 200:
-                return f"Error from Gemini API: {response.text}"
-                
-            # 5. Parse Response (Extract Image)
+            # 4. Prepare Inline Image Data
             try:
-                result = response.json()
-                candidates = result.get("candidates", [])
-                if candidates:
-                    parts = candidates[0].get("content", {}).get("parts", [])
-                    for part in parts:
-                        # API can return 'inline_data' (snake_case) or 'inlineData' (camelCase)
-                        inline_data = part.get("inline_data") or part.get("inlineData")
-                        
-                        if inline_data:
-                            # Handle both dictionary access and object access patterns if needed
-                            if isinstance(inline_data, dict):
-                                b64_data = inline_data.get("data")
-                            else:
-                                b64_data = inline_data.data
-                                
-                            if b64_data:
-                                with open(output_path, "wb") as f:
-                                    f.write(base64.b64decode(b64_data))
-                                return f"Successfully processed image. Saved to: {output_filename}"
-                            
-                # Fallback if no image returned
-                # CRITICAL: Do NOT return the full result if it's huge (e.g. contains base64), 
-                # as it will crash the Agent's context window.
-                result_str = str(result)
-                if len(result_str) > 1000:
-                    result_str = result_str[:1000] + "... (truncated)"
-                
-                print(f"DEBUG: Failed to find inline_data. Response keys: {result.keys()}")
-                if candidates:
-                    print(f"DEBUG: Candidate keys: {candidates[0].keys()}")
-                    if "content" in candidates[0]:
-                        print(f"DEBUG: Content keys: {candidates[0]['content'].keys()}")
-                        parts = candidates[0]['content'].get('parts', [])
-                        print(f"DEBUG: Parts content (truncated): {str(parts)[:500]}")
-                
-                return f"Model returned no image. Response summary: {result_str}"
-                
+                image_bytes = input_path.read_bytes()
+                # Simple mime type detection based on extension, default to jpeg
+                mime_type = "image/png" if input_path.suffix.lower() == ".png" else "image/jpeg"
+                image_part = types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
             except Exception as e:
-                return f"Error parsing API response: {str(e)}"
+                return f"Error reading image file: {e}"
+
+            # 5. Generate Content
+            prompt = "Isolate this object on a purely solid white background. Sharpen details. High quality texture."
+            
+            try:
+                response = client.models.generate_content(
+                    model='gemini-3-pro-image-preview',
+                    contents=[prompt, image_part]
+                )
+            except Exception as e:
+                return f"Error generating content: {e}"
+            
+            # 6. Save Result
+            if response.candidates:
+                for part in response.candidates[0].content.parts:
+                    if part.inline_data:
+                        with open(output_path, "wb") as f:
+                            f.write(part.inline_data.data)
+                        return f"Successfully processed image. Saved to: {output_filename}"
+            
+            return f"Model returned no image. Response: {response}"
 
         except Exception as e:
             return f"Error processing image with Nano Banana: {str(e)}"

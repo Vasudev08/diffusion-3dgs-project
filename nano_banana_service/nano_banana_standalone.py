@@ -1,35 +1,45 @@
 #!/usr/bin/env python
 """
 Standalone Nano Banana preprocessing script.
-Run this in a separate venv with google-generativeai installed.
+Run this in a separate venv with google-genai installed.
 """
 import os
 import sys
 from pathlib import Path
 from dotenv import load_dotenv
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 def preprocess_image(input_path: str, output_path: str, api_key: str) -> bool:
     """Preprocess an image using Nano Banana (Gemini 3 Pro Image)."""
     try:
-        genai.configure(api_key=api_key)
+        client = genai.Client(api_key=api_key)
         
         # Upload file
         print(f"Uploading {input_path}...")
-        sample_file = genai.upload_file(str(input_path))
-        
-        # Create model
-        model = genai.GenerativeModel('gemini-3-pro-image-preview')
+        try:
+            file_ref = client.files.upload(file=str(input_path))
+        except Exception as e:
+            print(f"Error uploading file: {e}")
+            return False
         
         # Generate/Edit
         prompt = "Isolate this object on a purely solid white background. Sharpen details. High quality texture."
         print("Processing with Nano Banana Pro...")
-        response = model.generate_content([prompt, sample_file])
+        
+        try:
+            response = client.models.generate_content(
+                model='gemini-3-pro-image-preview',
+                contents=[prompt, file_ref]
+            )
+        except Exception as e:
+            print(f"Error generating content: {e}")
+            return False
         
         # Save result
-        if response.parts:
-            for part in response.parts:
-                if hasattr(part, "inline_data") and part.inline_data:
+        if response.candidates:
+            for part in response.candidates[0].content.parts:
+                if part.inline_data:
                     print(f"Saving to {output_path}...")
                     with open(output_path, "wb") as f:
                         f.write(part.inline_data.data)
