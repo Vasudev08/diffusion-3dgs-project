@@ -55,6 +55,7 @@ dependencies = [
     "vision-aided-loss",
     "tenacity",
     "requests",
+    "google-genai",
 ]
 
 [project.optional-dependencies]
