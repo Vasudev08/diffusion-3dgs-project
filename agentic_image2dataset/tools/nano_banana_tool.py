@@ -48,7 +48,12 @@ class NanoBananaTool(BaseTool):
                 return f"Error reading image file: {e}"
 
             # 5. Generate Content
-            prompt = "Isolate this object on a purely solid white background. Sharpen details. High quality texture."
+            prompt = (
+                "Isolate this object on a fully transparent background. "
+                "Remove all background pixels so that only the object remains. "
+                "Return an image with an alpha channel (PNG with transparency). "
+                "Sharpen details and preserve high-quality texture."
+            )
             
             try:
                 response = client.models.generate_content(
