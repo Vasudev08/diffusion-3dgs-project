@@ -14,8 +14,10 @@ from langchain_core.runnables import Runnable
 from agentic_image2dataset.config import LLMConfig
 from agentic_image2dataset.models.base import ModelRegistry
 from agentic_image2dataset.tools import (
+    CenterImageTool,
     CopyFileTool,
     DeleteFileTool,
+    GenerateSurroundingViewsTool,
     ImageAnalysisTool,
     ListDirectoryTool,
     ModelExecutionTool,
@@ -145,6 +147,10 @@ class AgenticImageProcessor:
             CopyFileTool(workspace_root=workspace_root),
             MoveFileTool(workspace_root=workspace_root),
             DeleteFileTool(workspace_root=workspace_root),
+            CenterImageTool(self.model_registry, workspace_root=workspace_root),
+            GenerateSurroundingViewsTool(
+                self.model_registry, workspace_root=workspace_root
+            ),
         ]
 
         # Create agent
