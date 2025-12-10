@@ -350,6 +350,10 @@ class StableVirtualCameraModel(BaseProcessingModel):
         """Get model description."""
         return (
             "Stable Virtual Camera model for generating novel views from a single image. "
-            "Generates 25 frames (1 condition + 24 novel views) in an orbit trajectory. "
-            "Output resolution: 576x576."
+            "Generates N+1 frames (1 condition + N novel views). "
+            "Output resolution: 576x576. "
+            "Supports multiple trajectories: 'orbit' (default, best for object-centric), "
+            "'spiral' (adds variety), 'lemniscate', 'zoom-in', 'zoom-out', 'dolly zoom-in', 'dolly zoom-out', "
+            "'move-forward', 'move-backward', 'move-up', 'move-down', 'move-left', 'move-right', 'roll'. "
+            "Select the trajectory that best suits the image content and desired camera movement."
         )

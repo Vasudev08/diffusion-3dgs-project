@@ -2,6 +2,8 @@
 LangChain agent for orchestrating the image processing pipeline.
 """
 
+import base64
+import mimetypes
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -12,91 +14,19 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import Runnable
 
 from agentic_image2dataset.config import LLMConfig
+from agentic_image2dataset.llm_factory import create_llm
 from agentic_image2dataset.models.base import ModelRegistry
 from agentic_image2dataset.tools import (
     CopyFileTool,
     DeleteFileTool,
+    GenerateSurroundingViewsTool,
     ImageAnalysisTool,
     ListDirectoryTool,
     ModelExecutionTool,
     MoveFileTool,
     ResourceRequirementTool,
+    VisualAnalysisTool,
 )
-
-
-def create_llm(config: LLMConfig) -> BaseChatModel:
-    """
-    Factory function to create the appropriate LLM based on provider.
-
-    All LangChain models automatically read API keys from environment variables:
-    - Google: GOOGLE_API_KEY
-    - OpenAI: OPENAI_API_KEY
-    - Anthropic: ANTHROPIC_API_KEY
-
-    Users must set these environment variables before running the code.
-
-    Args:
-        config: LLM configuration containing provider, model_name, and other settings
-
-    Returns:
-        BaseChatModel instance for the specified provider
-
-    Raises:
-        ValueError: If provider is not supported or required dependencies are missing
-    """
-    provider = config.provider
-
-    if provider == "google":
-        try:
-            from langchain_google_genai import ChatGoogleGenerativeAI
-        except ImportError:
-            raise ImportError(
-                "langchain-google-genai is required for Google provider. Install it with: pip install langchain-google-genai"
-            )
-
-        # ChatGoogleGenerativeAI reads GOOGLE_API_KEY from environment automatically
-        return ChatGoogleGenerativeAI(
-            model=config.model_name,
-            temperature=config.temperature,
-            max_output_tokens=config.max_tokens,
-        )
-
-    elif provider == "openai":
-        try:
-            from langchain_openai import ChatOpenAI
-        except ImportError:
-            raise ImportError(
-                "langchain-openai is required for OpenAI provider. Install it with: pip install langchain-openai"
-            )
-
-        # ChatOpenAI reads OPENAI_API_KEY from environment automatically
-        return ChatOpenAI(
-            model=config.model_name,
-            temperature=config.temperature,
-            max_completion_tokens=config.max_tokens,
-        )
-
-    elif provider == "anthropic":
-        try:
-            from langchain_anthropic import ChatAnthropic
-        except ImportError:
-            raise ImportError(
-                "langchain-anthropic is required for Anthropic provider. Install it with: pip install langchain-anthropic"
-            )
-
-        # ChatAnthropic reads ANTHROPIC_API_KEY from environment automatically
-        return ChatAnthropic(
-            model_name=config.model_name,
-            temperature=config.temperature,
-            max_tokens_to_sample=config.max_tokens,
-            timeout=None,
-            stop=None,
-        )
-
-    else:
-        raise ValueError(
-            f"Unsupported provider: {provider}. Supported providers are: google, openai, anthropic"
-        )
 
 
 @dataclass
@@ -139,12 +69,16 @@ class AgenticImageProcessor:
         # Create tools
         self.tools: list[BaseTool] = [
             ImageAnalysisTool(workspace_root=workspace_root),
+            VisualAnalysisTool(llm=self.llm, workspace_root=workspace_root),
             ResourceRequirementTool(workspace_root=workspace_root),
             ModelExecutionTool(self.model_registry, workspace_root=workspace_root),
             ListDirectoryTool(workspace_root=workspace_root),
             CopyFileTool(workspace_root=workspace_root),
             MoveFileTool(workspace_root=workspace_root),
             DeleteFileTool(workspace_root=workspace_root),
+            GenerateSurroundingViewsTool(
+                self.model_registry, workspace_root=workspace_root
+            ),
         ]
 
         # Create agent
@@ -159,7 +93,7 @@ class AgenticImageProcessor:
                 model_guidance=[
                     ModelGuidance(
                         model_name="stable_virtual_camera",
-                        guidance_text="Works best when the input image is aligned to make generating views in an orbit trajectory easier (e.g., object centered and upright). Output image dimensions are 576x576",
+                        guidance_text="Works best when the input image is aligned to make generating views in an orbit trajectory easier (e.g., object centered and upright). You MUST analyze the image to choose the most suitable 'trajectory' parameter from the available options (e.g., 'orbit' for object-centric, 'spiral' for complex scenes, 'dolly zoom-in' for dramatic effect, etc.). Output image dimensions are 576x576",
                     ),
                 ],
             ),
@@ -188,7 +122,7 @@ class AgenticImageProcessor:
                 model_guidance=[
                     ModelGuidance(
                         model_name="qwen_image_edit",
-                        guidance_text="Use 'qwen_image_edit' to generate views parallel to the horizontal axis or modify image content based on text prompts",
+                        guidance_text="Use 'qwen_image_edit' with 'execute_model' to modify image content based on text prompts. You must construct a clear text prompt describing the desired transformation. AFTER using this model, you MUST use the 'visual_analysis' tool to verify if the edit was successful.",
                     ),
                 ],
                 shared_notes="Useful for creating additional camera angles when view generation models are insufficient",
@@ -269,6 +203,17 @@ Processing decisions should consider:
 - Optimal number of views for 3DGS training
 - Available computational resources and time constraints
 
+VERIFICATION & ADAPTATION:
+1. After performing critical image transformations (especially with 'qwen_image_edit' or 'visual_analysis'), you MUST use the 'visual_analysis' tool to verify the result.
+   - Example: If you asked to "rotate the image", use 'visual_analysis' to ask "Is the image rotated correctly?".
+2. If the verification FAILS (The output is not what you expected):
+   - ADAPT your plan. Do not just continue.
+   - You can:
+     - Retry the edit with a different/refined text prompt.
+     - Try a different sequence of operations.
+     - Undo the change (if you kept a backup) and try an alternative approach.
+     - If all else fails, report the issue to the user and stop.
+
 CRITICAL RESOURCE MANAGEMENT:
 1. Before executing ANY model, you MUST check if the system has enough VRAM using the 'check_resource_requirements' tool.
 2. If the check returns "Insufficient Resources":
@@ -299,26 +244,43 @@ Always explain your reasoning and provide clear feedback on the processing steps
 
     def plan_processing(self, image_path: Path) -> dict[str, str | bool]:
         """Plan the processing pipeline for the given image."""
+
+        # Encode image for VLM
+        mime_type, _ = mimetypes.guess_type(image_path)
+        if not mime_type:
+            mime_type = "image/jpeg"  # Default fallback
+
+        with open(image_path, "rb") as image_file:
+            image_data = base64.b64encode(image_file.read()).decode("utf-8")
+
+        image_url = f"data:{mime_type};base64,{image_data}"
+
         # Create planning prompt
-        planning_prompt = f"""
-Analyze the input image at {image_path} and create a processing plan.
+        planning_text = f"""
+Analyze the input image at {image_path.name} and create a processing plan.
 
 CRITICAL PLANNING CONSTRAINTS:
 1. DO NOT execute ANY models during this planning phase. Only use analysis tools (analyze_image, check_resource_requirements, list_directory).
 2. You MUST reason step-by-step before describing your plan. Walk through your thought process explicitly.
 
 STEP-BY-STEP REASONING PROCESS:
-1. First, use the analyze_image tool to understand the image characteristics.
-2. Then, reason through the following questions one by one:
-   a. What are the image's current resolution, quality, and characteristics?
+1. First, use the analyze_image tool to understand the image characteristics (technical quality).
+2. VISUAL ANALYSIS (VLM):
+   - Is the main subject clear and identifiable?
+   - Is the subject centered in the frame?
+   - Is the background complex or simple?
+   - Are there any visual artifacts or issues?
+
+3. Then, reason through the following questions one by one:
+   a. Based on VISUAL ANALYSIS, do we need to edit the image (e.g., center subject, rotate)? If so, define the specific text prompt(s) for the 'qwen_image_edit' model. Note that this could be a single transformation or a sequence of multiple transformations if needed.
    b. What processing transformations are needed to create a good 3DGS dataset?
    c. Should we apply super-resolution before view generation, after, or both? Why?
    d. Which specific models should we use, considering resource requirements?
-   e. How many views should we generate and why?
+   e. How many additional views should we generate and why?
    f. What parameters should we use for each model and why?
    g. What is the complete sequence of operations?
 
-3. After reasoning through each question, provide a detailed plan that includes:
+4. After reasoning through each question, provide a detailed plan that includes:
    - The complete processing pipeline (ordered list of operations)
    - Model choices with justifications
    - Parameter selections with rationales
@@ -327,9 +289,24 @@ STEP-BY-STEP REASONING PROCESS:
 Remember: This is PLANNING ONLY. Do not execute any models. Save execution for the execute_plan phase.
 """
 
-        response: AIMessage = self.agent.invoke(
-            {"messages": [HumanMessage(planning_prompt)]}
-        )
+        messages = []
+        if image_url:
+            messages.append(
+                HumanMessage(
+                    content=[
+                        {"type": "text", "text": planning_text},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": image_url},
+                        },
+                    ]
+                )
+            )
+        else:
+            messages.append(HumanMessage(content=planning_text))
+
+        # TODO: Handle case where last message is a tool call instead of the plan
+        response: AIMessage = self.agent.invoke({"messages": messages})
         return {"plan": response["messages"][-1].text, "success": True}
 
     def summarize_plan(self, verbose_plan: str) -> dict[str, str | bool]:
@@ -373,7 +350,9 @@ Execute the following processing plan:
 Use the available tools to:
 1. Analyze the image if not already done
 2. Execute the necessary models in the correct order
-3. Provide feedback on the results
+3. VERIFY critical steps using 'visual_analysis'
+4. ADAPT the plan if verification fails
+5. Provide feedback on the results
 
 Be systematic and check the results of each step before proceeding.
 """
