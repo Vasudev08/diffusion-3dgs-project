@@ -215,7 +215,7 @@ def main():
                 # 1. Train Splatfacto
                 # Reduced iterations for Colab speed, but enough for quality
                 train_cmd = [
-                    "ns-train", "splatfacto",
+                    sys.executable, "-m", "nerfstudio.scripts.train", "splatfacto",
                     "--data", str(dataset_dir),
                     "--output-dir", str(results_dir),
                     "--max-num-iterations", "7000", 
@@ -242,7 +242,7 @@ def main():
                 
                 # 3. Export to PLY
                 export_cmd = [
-                    "ns-export", "gaussian-splat",
+                    sys.executable, "-m", "nerfstudio.scripts.export", "gaussian-splat",
                     "--load-config", str(config_path),
                     "--output-dir", str(exports_dir)
                 ]
@@ -252,13 +252,13 @@ def main():
                 
                 print(f"\n3DGS Generation Complete! Output: {exports_dir}")
                 
-                # 4. Download Results
-                zip_and_download(output_dir)
-                
             except subprocess.CalledProcessError as e:
                 print(f"Error during Nerfstudio execution: {e}")
             except Exception as e:
                 print(f"An unexpected error occurred: {e}")
+            finally:
+                # 4. Download Results (Always download what we have, even if training failed)
+                zip_and_download(output_dir)
     else:
         print(f"\nProcessing failed: {result.get('error', 'Unknown error')}")
 

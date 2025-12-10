@@ -135,7 +135,7 @@ def main():
                 
                 # 1. Train Splatfacto
                 train_cmd = [
-                    "ns-train", "splatfacto",
+                    sys.executable, "-m", "nerfstudio.scripts.train", "splatfacto",
                     "--data", str(dataset_dir),
                     "--output-dir", str(results_dir),
                     "--max-num-iterations", "10000",
@@ -164,7 +164,7 @@ def main():
                 
                 # 3. Export to PLY
                 export_cmd = [
-                    "ns-export", "gaussian-splat",
+                    sys.executable, "-m", "nerfstudio.scripts.export", "gaussian-splat",
                     "--load-config", str(config_path),
                     "--output-dir", str(exports_dir)
                 ]
