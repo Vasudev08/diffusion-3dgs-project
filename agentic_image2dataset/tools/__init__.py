@@ -11,6 +11,7 @@ from agentic_image2dataset.tools.image_editing_tools import (
 )
 from agentic_image2dataset.tools.model_execution import ModelExecutionTool
 from agentic_image2dataset.tools.resource_requirement import ResourceRequirementTool
+from agentic_image2dataset.tools.visual_analysis import VisualAnalysisTool
 
 __all__ = [
     "FileOperationTool",
@@ -22,4 +23,5 @@ __all__ = [
     "MoveFileTool",
     "DeleteFileTool",
     "GenerateSurroundingViewsTool",
+    "VisualAnalysisTool",
 ]

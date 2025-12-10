@@ -14,6 +14,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import Runnable
 
 from agentic_image2dataset.config import LLMConfig
+from agentic_image2dataset.llm_factory import create_llm
 from agentic_image2dataset.models.base import ModelRegistry
 from agentic_image2dataset.tools import (
     CopyFileTool,
@@ -24,82 +25,8 @@ from agentic_image2dataset.tools import (
     ModelExecutionTool,
     MoveFileTool,
     ResourceRequirementTool,
+    VisualAnalysisTool,
 )
-
-
-def create_llm(config: LLMConfig) -> BaseChatModel:
-    """
-    Factory function to create the appropriate LLM based on provider.
-
-    All LangChain models automatically read API keys from environment variables:
-    - Google: GOOGLE_API_KEY
-    - OpenAI: OPENAI_API_KEY
-    - Anthropic: ANTHROPIC_API_KEY
-
-    Users must set these environment variables before running the code.
-
-    Args:
-        config: LLM configuration containing provider, model_name, and other settings
-
-    Returns:
-        BaseChatModel instance for the specified provider
-
-    Raises:
-        ValueError: If provider is not supported or required dependencies are missing
-    """
-    provider = config.provider
-
-    if provider == "google":
-        try:
-            from langchain_google_genai import ChatGoogleGenerativeAI
-        except ImportError:
-            raise ImportError(
-                "langchain-google-genai is required for Google provider. Install it with: pip install langchain-google-genai"
-            )
-
-        # ChatGoogleGenerativeAI reads GOOGLE_API_KEY from environment automatically
-        return ChatGoogleGenerativeAI(
-            model=config.model_name,
-            temperature=config.temperature,
-            max_output_tokens=config.max_tokens,
-        )
-
-    elif provider == "openai":
-        try:
-            from langchain_openai import ChatOpenAI
-        except ImportError:
-            raise ImportError(
-                "langchain-openai is required for OpenAI provider. Install it with: pip install langchain-openai"
-            )
-
-        # ChatOpenAI reads OPENAI_API_KEY from environment automatically
-        return ChatOpenAI(
-            model=config.model_name,
-            temperature=config.temperature,
-            max_completion_tokens=config.max_tokens,
-        )
-
-    elif provider == "anthropic":
-        try:
-            from langchain_anthropic import ChatAnthropic
-        except ImportError:
-            raise ImportError(
-                "langchain-anthropic is required for Anthropic provider. Install it with: pip install langchain-anthropic"
-            )
-
-        # ChatAnthropic reads ANTHROPIC_API_KEY from environment automatically
-        return ChatAnthropic(
-            model_name=config.model_name,
-            temperature=config.temperature,
-            max_tokens_to_sample=config.max_tokens,
-            timeout=None,
-            stop=None,
-        )
-
-    else:
-        raise ValueError(
-            f"Unsupported provider: {provider}. Supported providers are: google, openai, anthropic"
-        )
 
 
 @dataclass
@@ -142,6 +69,7 @@ class AgenticImageProcessor:
         # Create tools
         self.tools: list[BaseTool] = [
             ImageAnalysisTool(workspace_root=workspace_root),
+            VisualAnalysisTool(llm=self.llm, workspace_root=workspace_root),
             ResourceRequirementTool(workspace_root=workspace_root),
             ModelExecutionTool(self.model_registry, workspace_root=workspace_root),
             ListDirectoryTool(workspace_root=workspace_root),
@@ -194,7 +122,7 @@ class AgenticImageProcessor:
                 model_guidance=[
                     ModelGuidance(
                         model_name="qwen_image_edit",
-                        guidance_text="Use 'qwen_image_edit' with 'execute_model' to modify image content based on text prompts. You must construct a clear text prompt describing the desired transformation.",
+                        guidance_text="Use 'qwen_image_edit' with 'execute_model' to modify image content based on text prompts. You must construct a clear text prompt describing the desired transformation. AFTER using this model, you MUST use the 'visual_analysis' tool to verify if the edit was successful.",
                     ),
                 ],
                 shared_notes="Useful for creating additional camera angles when view generation models are insufficient",
@@ -275,6 +203,17 @@ Processing decisions should consider:
 - Optimal number of views for 3DGS training
 - Available computational resources and time constraints
 
+VERIFICATION & ADAPTATION:
+1. After performing critical image transformations (especially with 'qwen_image_edit' or 'visual_analysis'), you MUST use the 'visual_analysis' tool to verify the result.
+   - Example: If you asked to "rotate the image", use 'visual_analysis' to ask "Is the image rotated correctly?".
+2. If the verification FAILS (The output is not what you expected):
+   - ADAPT your plan. Do not just continue.
+   - You can:
+     - Retry the edit with a different/refined text prompt.
+     - Try a different sequence of operations.
+     - Undo the change (if you kept a backup) and try an alternative approach.
+     - If all else fails, report the issue to the user and stop.
+
 CRITICAL RESOURCE MANAGEMENT:
 1. Before executing ANY model, you MUST check if the system has enough VRAM using the 'check_resource_requirements' tool.
 2. If the check returns "Insufficient Resources":
@@ -337,7 +276,7 @@ STEP-BY-STEP REASONING PROCESS:
    b. What processing transformations are needed to create a good 3DGS dataset?
    c. Should we apply super-resolution before view generation, after, or both? Why?
    d. Which specific models should we use, considering resource requirements?
-   e. How many views should we generate and why?
+   e. How many additional views should we generate and why?
    f. What parameters should we use for each model and why?
    g. What is the complete sequence of operations?
 
@@ -411,7 +350,9 @@ Execute the following processing plan:
 Use the available tools to:
 1. Analyze the image if not already done
 2. Execute the necessary models in the correct order
-3. Provide feedback on the results
+3. VERIFY critical steps using 'visual_analysis'
+4. ADAPT the plan if verification fails
+5. Provide feedback on the results
 
 Be systematic and check the results of each step before proceeding.
 """
