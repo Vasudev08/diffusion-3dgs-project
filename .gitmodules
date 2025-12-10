@@ -17,3 +17,6 @@
 [submodule "HYPIR"]
 	path = HYPIR
 	url = https://github.com/XPixelGroup/HYPIR.git
+[submodule "mvsplat"]
+	path = mvsplat
+	url = https://github.com/donydchen/mvsplat.git
