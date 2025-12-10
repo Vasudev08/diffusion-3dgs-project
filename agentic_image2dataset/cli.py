@@ -62,7 +62,7 @@ Examples:
     parser.add_argument(
         "--llm-model",
         default="gemini-2.5-flash",
-        help="LLM model to use for planning (e.g., gemini-2.5-flash, gemini-pro, gpt-4, gpt-4-turbo, claude-3-opus, claude-3-5-sonnet)",
+        help="LLM model to use for planning (e.g., gemini-2.5-flash, gemini-3-pro, gpt-5.1, claude-4.5-opus, claude-4.5-sonnet)",
     )
 
     parser.add_argument(
@@ -154,8 +154,7 @@ Examples:
 
         if result["success"]:
             print("\n✅ Processing completed successfully!")
-            print(f"Generated {result['generated_images']} images")
-            print(f"Output directory: {result['output_dir']}")
+            print(f"Execution result: {result}")
 
             if result.get("issues"):
                 issues = result["issues"]
@@ -166,13 +165,8 @@ Examples:
                 print(f"\n⚠️  Detected issues: {issues_str}")
         else:
             print(f"\n❌ Processing failed: {result['error']}")
-            sys.exit(1)
-
     except KeyboardInterrupt:
         print("\n⚠️  Processing interrupted by user")
-        sys.exit(1)
-    except Exception as e:
-        print(f"\n❌ Unexpected error: {e}")
         sys.exit(1)
 
 
