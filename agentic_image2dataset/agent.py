@@ -16,7 +16,6 @@ from langchain_core.runnables import Runnable
 from agentic_image2dataset.config import LLMConfig
 from agentic_image2dataset.models.base import ModelRegistry
 from agentic_image2dataset.tools import (
-    CenterImageTool,
     CopyFileTool,
     DeleteFileTool,
     GenerateSurroundingViewsTool,
@@ -149,7 +148,6 @@ class AgenticImageProcessor:
             CopyFileTool(workspace_root=workspace_root),
             MoveFileTool(workspace_root=workspace_root),
             DeleteFileTool(workspace_root=workspace_root),
-            CenterImageTool(self.model_registry, workspace_root=workspace_root),
             GenerateSurroundingViewsTool(
                 self.model_registry, workspace_root=workspace_root
             ),
@@ -196,7 +194,7 @@ class AgenticImageProcessor:
                 model_guidance=[
                     ModelGuidance(
                         model_name="qwen_image_edit",
-                        guidance_text="Use 'qwen_image_edit' to generate views parallel to the horizontal axis or modify image content based on text prompts",
+                        guidance_text="Use 'qwen_image_edit' with 'execute_model' to modify image content based on text prompts. You must construct a clear text prompt describing the desired transformation.",
                     ),
                 ],
                 shared_notes="Useful for creating additional camera angles when view generation models are insufficient",
@@ -335,7 +333,7 @@ STEP-BY-STEP REASONING PROCESS:
    - Are there any visual artifacts or issues?
 
 3. Then, reason through the following questions one by one:
-   a. Based on VISUAL ANALYSIS, do we need to center the subject using 'center_subject'?
+   a. Based on VISUAL ANALYSIS, do we need to edit the image (e.g., center subject, rotate)? If so, define the specific text prompt(s) for the 'qwen_image_edit' model. Note that this could be a single transformation or a sequence of multiple transformations if needed.
    b. What processing transformations are needed to create a good 3DGS dataset?
    c. Should we apply super-resolution before view generation, after, or both? Why?
    d. Which specific models should we use, considering resource requirements?

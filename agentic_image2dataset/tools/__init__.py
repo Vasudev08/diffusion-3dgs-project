@@ -7,7 +7,6 @@ from agentic_image2dataset.tools.file_system import (
 )
 from agentic_image2dataset.tools.image_analysis import ImageAnalysisTool
 from agentic_image2dataset.tools.image_editing_tools import (
-    CenterImageTool,
     GenerateSurroundingViewsTool,
 )
 from agentic_image2dataset.tools.model_execution import ModelExecutionTool
@@ -22,6 +21,5 @@ __all__ = [
     "CopyFileTool",
     "MoveFileTool",
     "DeleteFileTool",
-    "CenterImageTool",
     "GenerateSurroundingViewsTool",
 ]
