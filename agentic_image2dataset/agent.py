@@ -167,7 +167,7 @@ class AgenticImageProcessor:
                 model_guidance=[
                     ModelGuidance(
                         model_name="stable_virtual_camera",
-                        guidance_text="Works best when the input image is aligned to make generating views in an orbit trajectory easier (e.g., object centered and upright). Output image dimensions are 576x576",
+                        guidance_text="Works best when the input image is aligned to make generating views in an orbit trajectory easier (e.g., object centered and upright). You MUST analyze the image to choose the most suitable 'trajectory' parameter from the available options (e.g., 'orbit' for object-centric, 'spiral' for complex scenes, 'dolly zoom-in' for dramatic effect, etc.). Output image dimensions are 576x576",
                     ),
                 ],
             ),
