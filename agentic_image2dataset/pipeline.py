@@ -91,6 +91,7 @@ class AgenticPipeline:
         self,
         input_image: Path,
         output_dir: Path,
+        **kwargs,
     ) -> dict[str, object]:
         """
         Process a single input image into a 3DGS dataset.
