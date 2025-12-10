@@ -2,6 +2,8 @@
 LangChain agent for orchestrating the image processing pipeline.
 """
 
+import base64
+import mimetypes
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -305,18 +307,35 @@ Always explain your reasoning and provide clear feedback on the processing steps
 
     def plan_processing(self, image_path: Path) -> dict[str, str | bool]:
         """Plan the processing pipeline for the given image."""
+
+        # Encode image for VLM
+        mime_type, _ = mimetypes.guess_type(image_path)
+        if not mime_type:
+            mime_type = "image/jpeg"  # Default fallback
+
+        with open(image_path, "rb") as image_file:
+            image_data = base64.b64encode(image_file.read()).decode("utf-8")
+
+        image_url = f"data:{mime_type};base64,{image_data}"
+
         # Create planning prompt
-        planning_prompt = f"""
-Analyze the input image at {image_path} and create a processing plan.
+        planning_text = f"""
+Analyze the input image at {image_path.name} and create a processing plan.
 
 CRITICAL PLANNING CONSTRAINTS:
 1. DO NOT execute ANY models during this planning phase. Only use analysis tools (analyze_image, check_resource_requirements, list_directory).
 2. You MUST reason step-by-step before describing your plan. Walk through your thought process explicitly.
 
 STEP-BY-STEP REASONING PROCESS:
-1. First, use the analyze_image tool to understand the image characteristics.
-2. Then, reason through the following questions one by one:
-   a. What are the image's current resolution, quality, and characteristics?
+1. First, use the analyze_image tool to understand the image characteristics (technical quality).
+2. VISUAL ANALYSIS (VLM):
+   - Is the main subject clear and identifiable?
+   - Is the subject centered in the frame?
+   - Is the background complex or simple?
+   - Are there any visual artifacts or issues?
+
+3. Then, reason through the following questions one by one:
+   a. Based on VISUAL ANALYSIS, do we need to center the subject using 'center_subject'?
    b. What processing transformations are needed to create a good 3DGS dataset?
    c. Should we apply super-resolution before view generation, after, or both? Why?
    d. Which specific models should we use, considering resource requirements?
@@ -324,7 +343,7 @@ STEP-BY-STEP REASONING PROCESS:
    f. What parameters should we use for each model and why?
    g. What is the complete sequence of operations?
 
-3. After reasoning through each question, provide a detailed plan that includes:
+4. After reasoning through each question, provide a detailed plan that includes:
    - The complete processing pipeline (ordered list of operations)
    - Model choices with justifications
    - Parameter selections with rationales
@@ -333,9 +352,24 @@ STEP-BY-STEP REASONING PROCESS:
 Remember: This is PLANNING ONLY. Do not execute any models. Save execution for the execute_plan phase.
 """
 
-        response: AIMessage = self.agent.invoke(
-            {"messages": [HumanMessage(planning_prompt)]}
-        )
+        messages = []
+        if image_url:
+            messages.append(
+                HumanMessage(
+                    content=[
+                        {"type": "text", "text": planning_text},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": image_url},
+                        },
+                    ]
+                )
+            )
+        else:
+            messages.append(HumanMessage(content=planning_text))
+
+        # TODO: Handle case where last message is a tool call instead of the plan
+        response: AIMessage = self.agent.invoke({"messages": messages})
         return {"plan": response["messages"][-1].text, "success": True}
 
     def summarize_plan(self, verbose_plan: str) -> dict[str, str | bool]:

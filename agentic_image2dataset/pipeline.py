@@ -133,7 +133,7 @@ class AgenticPipeline:
             # Agent decides its own output structure, but we instructed it to use 'output' dir
             agent_output_dir = workspace_dir / "output"
 
-            plan_result = agent.plan_processing(Path(input_image.name))
+            plan_result = agent.plan_processing(input_image)
             if not plan_result["success"]:
                 return {
                     "success": False,
